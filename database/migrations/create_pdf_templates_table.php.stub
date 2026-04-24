@@ -1,0 +1,28 @@
+<?php
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('pdf_templates', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('model_key')->default('invoice');
+            $table->string('page_size')->default('Letter');
+            $table->string('orientation')->default('portrait');
+            $table->unsignedSmallInteger('pages')->default(1);
+            $table->string('filename_pattern')->default('{{id}}.pdf');
+            $table->json('fields')->nullable();
+            $table->string('background_pdf')->nullable();
+            $table->string('disk')->nullable();
+            $table->string('used_in')->nullable();
+            $table->timestamps();
+        });
+    }
+    public function down(): void
+    {
+        Schema::dropIfExists('pdf_templates');
+    }
+};

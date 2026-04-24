@@ -1,0 +1,59 @@
+{
+    "name": "kukux/pdf-template-builder",
+    "description": "A drag-and-drop PDF template builder plugin for Filament Admin. Upload a PDF background, bind Eloquent model fields, and place them visually on the canvas.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "laravel",
+        "filament",
+        "filament-plugin",
+        "pdf",
+        "template",
+        "builder",
+        "drag-drop"
+    ],
+    "authors": [
+        {
+            "name": "Jicoy Cortejo",
+            "email": "jicoy.cortejo@gmail.com",
+            "homepage": "https://github.com/pdf-template-builder"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "filament/filament": "^3.0 || ^4.0 || ^5.0",
+        "illuminate/contracts": "^11.0 || ^12.0",
+        "illuminate/database": "^11.0 || ^12.0",
+        "illuminate/http": "^11.0 || ^12.0",
+        "illuminate/routing": "^11.0 || ^12.0",
+        "illuminate/support": "^11.0 || ^12.0",
+        "spatie/laravel-package-tools": "^1.15"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^9.0",
+        "pestphp/pest": "^2.0",
+        "pestphp/pest-plugin-laravel": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Kukux\\PdfTemplateBuilder\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Kukux\\PdfTemplateBuilder\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Kukux\\PdfTemplateBuilder\\PdfTemplateBuilderServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
