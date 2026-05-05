@@ -1,3 +1,9 @@
+# PDF Template Builder
+
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/kukux/pdf-template-builder.svg?style=flat-square)](https://packagist.org/packages/kukux/pdf-template-builder)
+[![Total Downloads](https://img.shields.io/packagist/dt/kukux/pdf-template-builder.svg?style=flat-square)](https://packagist.org/packages/kukux/pdf-template-builder)
+[![License](https://img.shields.io/packagist/l/kukux/pdf-template-builder.svg?style=flat-square)](https://packagist.org/packages/kukux/pdf-template-builder)
+
 # Installation
 
 ## 1. Require the package
