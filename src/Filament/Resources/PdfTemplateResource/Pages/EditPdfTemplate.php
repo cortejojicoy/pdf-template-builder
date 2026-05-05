@@ -55,7 +55,7 @@ class EditPdfTemplate extends Page
                 'apiBase'      => route('pdf-builder.api.base'),
                 'csrfToken'    => csrf_token(),
                 'listUrl'      => static::getResource()::getUrl('index'),
-                'assetBase'    => asset('vendor/pdf-template-builder/js'),
+                'assetBase'    => asset('vendor/pdf-template-builder'),
             ],
         ];
     }
