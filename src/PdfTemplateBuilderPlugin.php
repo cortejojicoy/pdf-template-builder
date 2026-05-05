@@ -5,6 +5,7 @@ namespace Kukux\PdfTemplateBuilder;
 use Filament\Contracts\Plugin;
 use Filament\Panel;
 use Kukux\PdfTemplateBuilder\Filament\Resources\PdfTemplateResource;
+use Kukux\PdfTemplateBuilder\Rendering\Contracts\PdfEngine;
 
 class PdfTemplateBuilderPlugin implements Plugin
 {
@@ -13,6 +14,7 @@ class PdfTemplateBuilderPlugin implements Plugin
     protected string $uploadPath = 'pdf-templates/backgrounds';
     protected string $navigationGroup = '';
     protected ?int $navigationSort = null;
+    protected string|PdfEngine|null $engine = null;
 
     public static function make(): static
     {
@@ -119,6 +121,20 @@ class PdfTemplateBuilderPlugin implements Plugin
     public function getNavigationSort(): ?int
     {
         return $this->navigationSort;
+    }
+
+    /**
+     * Override the PDF engine. Pass an instance, a class name, or null to use auto-detection.
+     */
+    public function engine(string|PdfEngine|null $engine): static
+    {
+        $this->engine = $engine;
+
+        if ($engine !== null) {
+            app()->bind(PdfEngine::class, fn () => is_string($engine) ? app($engine) : $engine);
+        }
+
+        return $this;
     }
 
     protected function defaultModels(): array
