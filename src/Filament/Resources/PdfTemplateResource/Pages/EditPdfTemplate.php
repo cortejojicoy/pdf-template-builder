@@ -60,12 +60,12 @@ class EditPdfTemplate extends Page
         ];
     }
 
-    protected function getTitle(): string|\Illuminate\Contracts\Support\Htmlable
+    public function getTitle(): string|\Illuminate\Contracts\Support\Htmlable
     {
         return $this->record->name;
     }
 
-    protected function getBreadcrumbs(): array
+    public function getBreadcrumbs(): array
     {
         return [
             static::getResource()::getUrl('index') => 'PDF Templates',
