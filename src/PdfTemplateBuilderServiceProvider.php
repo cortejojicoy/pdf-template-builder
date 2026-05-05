@@ -5,6 +5,7 @@ namespace Kukux\PdfTemplateBuilder;
 use Illuminate\Support\Facades\Gate;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
+use Kukux\PdfTemplateBuilder\Filament\Resources\ResourceResolver;
 use Kukux\PdfTemplateBuilder\Models\PdfTemplate;
 use Kukux\PdfTemplateBuilder\Policies\PdfTemplatePolicy;
 use Kukux\PdfTemplateBuilder\Rendering\Contracts\PdfEngine;
@@ -21,6 +22,15 @@ class PdfTemplateBuilderServiceProvider extends PackageServiceProvider
             ->hasViews()
             ->hasMigration('create_pdf_templates_table')
             ->hasRoute('web');
+    }
+
+    public function register(): void
+    {
+        // Alias the canonical PdfTemplateResource to the v3/v4 implementation BEFORE
+        // anything references the canonical name (panel registration, controllers, etc.).
+        ResourceResolver::registerAlias();
+
+        parent::register();
     }
 
     public function packageRegistered(): void
