@@ -11,9 +11,8 @@ class TestCase extends Orchestra
     {
         parent::setUp();
 
-        // Migrations ship as .stub; load and run inline.
-        $migration = include __DIR__ . '/../database/migrations/create_pdf_templates_table.php.stub';
-        $migration->up();
+        $this->artisan('vendor:publish', ['--tag' => 'pdf-template-builder-migrations']);
+        $this->artisan('migrate')->run();
     }
 
     protected function getPackageProviders($app): array
