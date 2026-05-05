@@ -37,6 +37,19 @@ npm run build      # one-shot build → resources/dist/pdf-builder.js
 npm run dev        # rebuild on save
 ```
 
+## ⓘ Filament v3 / v4 / v5 auto-detection
+
+The plugin ships two parallel Resource implementations and aliases the canonical class name to the right one based on the Filament major version installed in your project.
+
+| Detected | Class actually loaded |
+|---|---|
+| Filament v3 (no `Filament\Schemas\Schema` class) | `Kukux\PdfTemplateBuilder\Filament\Resources\V3\PdfTemplateResource` |
+| Filament v4 / v5 (`Filament\Schemas\Schema` exists) | `Kukux\PdfTemplateBuilder\Filament\Resources\V4\PdfTemplateResource` |
+
+Detection happens in `PdfTemplateBuilderServiceProvider::register()` via `class_alias`, before Filament's panel resolves any resource. You always reference the canonical `Kukux\PdfTemplateBuilder\Filament\Resources\PdfTemplateResource::class` — never the V3/V4 variants directly.
+
+If you ever see `Class "Kukux\…\PdfTemplateResource" not found` after upgrading, run `composer dump-autoload`. PSR-4 lookup needs to miss so the alias can be consulted, and a stale optimized classmap can short-circuit that.
+
 ## 4. Register the plugin in your Filament panel
 
 In your `PanelProvider` (e.g. `app/Providers/Filament/AdminPanelProvider.php`):
