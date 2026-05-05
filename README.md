@@ -12,9 +12,10 @@
 composer require kukux/pdf-template-builder
 ```
 
-## 2. Run the migration
+## 2. Publish and run the migration
 
 ```bash
+php artisan vendor:publish --tag=pdf-template-builder-migrations
 php artisan migrate
 ```
 
