@@ -1,13 +1,22 @@
 <?php
 
-namespace Kukux\PdfTemplateBuilder\Filament\Resources;
+namespace Kukux\PdfTemplateBuilder\Filament\Resources\V3;
 
 use Filament\Forms;
+use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
+use Filament\Tables\Table;
 use Kukux\PdfTemplateBuilder\Filament\Resources\PdfTemplateResource\Pages;
 use Kukux\PdfTemplateBuilder\Models\PdfTemplate;
 use Kukux\PdfTemplateBuilder\PdfTemplateBuilderPlugin;
+
+/**
+ * Filament v3 implementation. The package's service provider class_aliases
+ * the canonical Kukux\PdfTemplateBuilder\Filament\Resources\PdfTemplateResource
+ * to either this class or the V4 variant, depending on the installed Filament
+ * major version detected at boot.
+ */
 
 class PdfTemplateResource extends Resource
 {
@@ -31,14 +40,7 @@ class PdfTemplateResource extends Resource
         return static::getPlugin()->getNavigationSort();
     }
 
-    /**
-     * Cross-version form definition.
-     *
-     * Filament v3 passes \Filament\Forms\Form, v4/v5 pass \Filament\Schemas\Schema.
-     * Both expose ->schema([...]) returning $this, so we drop the strict type hint
-     * and rely on the shared fluent API.
-     */
-    public static function form($form)
+    public static function form(Form $form): Form
     {
         $plugin  = static::getPlugin();
         $models  = $plugin->getModels();
@@ -100,13 +102,7 @@ class PdfTemplateResource extends Resource
         ]);
     }
 
-    /**
-     * Cross-version table definition.
-     *
-     * \Filament\Tables\Table is stable across v3/v4/v5 in name, but we drop
-     * the strict hint anyway so any panel-level subclass override is accepted.
-     */
-    public static function table($table)
+    public static function table(Table $table): Table
     {
         $plugin = static::getPlugin();
         $models = $plugin->getModels();
@@ -162,20 +158,6 @@ class PdfTemplateResource extends Resource
                 ]),
             ])
             ->defaultSort('updated_at', 'desc');
-    }
-
-    /**
-     * @internal Resolves the Filament major version (3, 4, or 5) at runtime.
-     * Useful if you need to branch on capabilities (e.g. v4-only schema features).
-     */
-    protected static function filamentMajorVersion(): int
-    {
-        if (class_exists(\Filament\Schemas\Schema::class)) {
-            // v4 introduced Schema; v5 keeps it. Distinguish by a v5-only class if you need to.
-            return class_exists(\Filament\Schemas\Components\Tabs::class) ? 5 : 4;
-        }
-
-        return 3;
     }
 
     public static function getPages(): array
