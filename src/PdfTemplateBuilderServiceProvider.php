@@ -20,7 +20,6 @@ class PdfTemplateBuilderServiceProvider extends PackageServiceProvider
             ->hasConfigFile()
             ->hasViews()
             ->hasMigration('create_pdf_templates_table')
-            ->runsMigrations()
             ->hasRoute('web');
     }
 
