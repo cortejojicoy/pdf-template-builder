@@ -100,19 +100,11 @@
     {{-- ── Mount point ─────────────────────────────────────────────────────────── --}}
     <div id="pdf-builder-root"></div>
 
-    {{-- ── React + Babel (CDN) ─────────────────────────────────────────────────── --}}
-    <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Caveat:wght@500&display=swap" rel="stylesheet" />
 
-    {{-- ── Package JS assets (published to public/vendor/...) ─────────────────── --}}
-    @php $base = asset('vendor/filament-pdf-template-builder/js'); @endphp
-
-    <script type="text/babel" data-presets="react" src="{{ $base }}/icons.jsx"></script>
-    <script type="text/babel" data-presets="react" src="{{ $base }}/builder.jsx"></script>
-    <script type="text/babel" data-presets="react" src="{{ $base }}/canvas.jsx"></script>
-    <script type="text/babel" data-presets="react" src="{{ $base }}/builder-app.jsx"></script>
+    {{-- ── Bundled builder app (Vite-built, published to public/vendor/pdf-template-builder/) ── --}}
+    @php $base = $builderConfig['assetBase']; @endphp
+    <script src="{{ $base }}/pdf-builder.js" defer></script>
 </x-filament-panels::page>
