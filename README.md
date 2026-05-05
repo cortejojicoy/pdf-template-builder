@@ -14,13 +14,21 @@ php artisan migrate
 
 ## 3. Publish assets
 
-The builder UI is a React SPA served as static files. Publish them to your `public/` directory:
+The builder UI is a React SPA bundled with Vite. The package ships pre-built JS in `resources/dist/`. Publish to `public/`:
 
 ```bash
 php artisan vendor:publish --tag=pdf-template-builder-assets
 ```
 
-> Re-run this command after each package update to get the latest JS files.
+> Re-run this command after each package update to get the latest bundle.
+
+**For maintainers / contributors** — to rebuild the bundle from JSX source:
+
+```bash
+npm install
+npm run build      # one-shot build → resources/dist/pdf-builder.js
+npm run dev        # rebuild on save
+```
 
 ## 4. Register the plugin in your Filament panel
 
@@ -107,17 +115,110 @@ PdfTemplateBuilderPlugin::make()->disk('s3')->uploadPath('my-path/pdfs')
 - **API routes** at `/filament-pdf-builder/api/*` (web + auth middleware).
 - **`pdf_templates` table** in your database.
 
-## Reading saved templates in your app
+## Generating PDFs
+
+### 1. Install a PDF engine (optional but recommended)
+
+The plugin auto-detects [`dompdf/dompdf`](https://github.com/dompdf/dompdf) and uses it for output. Without it, `render()` falls back to HTML (browser print → save as PDF still works).
+
+```bash
+composer require dompdf/dompdf
+```
+
+### 2. Drop a "Generate PDF" button into any Filament page
+
+**On a ViewRecord / EditRecord page (header action):**
+
+```php
+use Kukux\PdfTemplateBuilder\Filament\Actions\GeneratePdfAction;
+
+protected function getHeaderActions(): array
+{
+    return [
+        GeneratePdfAction::make()
+            ->template('invoice-default'),  // by template name
+    ];
+}
+```
+
+**As a row action on a Resource table:**
+
+```php
+use Kukux\PdfTemplateBuilder\Filament\Actions\GeneratePdfTableAction;
+
+->actions([
+    GeneratePdfTableAction::make()
+        ->template(1),                       // by template id
+])
+```
+
+**Dynamic template selection:**
+
+```php
+GeneratePdfAction::make()
+    ->templateUsing(fn ($record) => $record->is_quote ? 'quote' : 'invoice')
+    ->withContexts(fn ($record) => ['org' => $record->organization]);
+```
+
+### 3. Programmatic rendering
 
 ```php
 use Kukux\PdfTemplateBuilder\Models\PdfTemplate;
 
-$template = PdfTemplate::find(1);
+$template = PdfTemplate::where('name', 'invoice-default')->firstOrFail();
+$invoice  = Invoice::find(42);
 
-// $template->fields — array of placed field definitions
-// $template->model_key — e.g. 'invoice'
-// $template->pages — page count
-// $template->background_url — URL to the uploaded PDF
+// Get the response (PDF if dompdf is installed, else HTML)
+return $template->stream($invoice);
+
+// Or just the rendered HTML:
+$html = $template->render($invoice);
 ```
 
-Use the `fields` array with a PDF generation library (e.g. [barryvdh/laravel-dompdf](https://github.com/barryvdh/laravel-dompdf), [spatie/laravel-pdf](https://github.com/spatie/laravel-pdf)) to render the final document.
+### 4. Field token resolution
+
+Fields placed in the builder have a `key` like `invoice.number` or `customer.email`. At render time:
+
+- The leading segment matching the template's `model_key` is stripped, then the remainder is resolved against the record via `data_get()`.
+- Otherwise the full key is resolved against the record (so relations work: `customer.name` → `$invoice->customer->name`).
+- Pass extra named contexts via `->withContexts(['org' => $org])` and reference them with `org.name` in field tokens.
+
+### 5. Choosing a PDF engine
+
+The plugin ships three engines. Pick based on your needs:
+
+| Engine | When to use | Requires |
+|---|---|---|
+| `HtmlEngine` *(default fallback)* | Quick preview; user prints to PDF from browser. | — |
+| `DompdfEngine` *(auto-detected)* | Generic HTML→PDF. Good for templates with no background or simple backgrounds. | `composer require dompdf/dompdf` |
+| `FpdiEngine` | **You uploaded a designed PDF as the background and want the original PDF preserved exactly.** Stamps fields directly onto the original page. | `composer require setasign/fpdi tecnickcom/tcpdf` |
+
+Wire your choice on the plugin:
+
+```php
+use Kukux\PdfTemplateBuilder\Rendering\Engines\FpdiEngine;
+
+PdfTemplateBuilderPlugin::make()->engine(FpdiEngine::class)
+```
+
+You can also implement `Kukux\PdfTemplateBuilder\Rendering\Contracts\PdfEngine` (or `TemplateAwarePdfEngine` for non-HTML pipelines like Browsershot) and register your own.
+
+### 6. Running the test suite
+
+```bash
+composer install
+vendor/bin/pest
+```
+
+The package ships with Pest tests covering routes, the field resolver, the HTML renderer, the filename pattern, and basic model persistence. Run them after every change.
+
+### 7. Authorization
+
+Templates use a default-permissive `PdfTemplatePolicy`. Override it in your `AuthServiceProvider`:
+
+```php
+Gate::policy(
+    \Kukux\PdfTemplateBuilder\Models\PdfTemplate::class,
+    \App\Policies\PdfTemplatePolicy::class,
+);
+```

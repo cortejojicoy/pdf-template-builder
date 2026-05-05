@@ -34,6 +34,11 @@
         "pestphp/pest": "^2.0",
         "pestphp/pest-plugin-laravel": "^2.0"
     },
+    "suggest": {
+        "dompdf/dompdf": "Install to enable PDF output via the bundled DompdfEngine. Without it, the plugin returns HTML.",
+        "setasign/fpdi": "Install with tecnickcom/tcpdf to enable FpdiEngine — true PDF overlay that preserves the original uploaded PDF.",
+        "tecnickcom/tcpdf": "Required by FpdiEngine for unicode-aware PDF generation when stamping fields onto the original PDF."
+    },
     "autoload": {
         "psr-4": {
             "Kukux\\PdfTemplateBuilder\\": "src/"
@@ -51,8 +56,14 @@
             ]
         }
     },
+    "scripts": {
+        "test": "vendor/bin/pest"
+    },
     "config": {
-        "sort-packages": true
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
     },
     "minimum-stability": "dev",
     "prefer-stable": true
