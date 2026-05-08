@@ -17,9 +17,12 @@ class EditPdfTemplate extends Page
 {
     protected static string $resource = PdfTemplateResource::class;
 
-    protected static string $view = 'pdf-template-builder::pages.edit-pdf-template';
-
     public PdfTemplate $record;
+
+    public function getView(): string
+    {
+        return 'pdf-template-builder::pages.edit-pdf-template';
+    }
 
     public function mount(int|string $record): void
     {
