@@ -30,7 +30,7 @@ class PdfTemplateResource extends Resource
 {
     protected static ?string $model = PdfTemplate::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-document-text';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-document-text';
 
     protected static ?string $navigationLabel = 'PDF Templates';
 
