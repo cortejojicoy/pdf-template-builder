@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Icon } from './icons.jsx';
+import { btnGhost } from './styles.js';
 
 const PAGE_W = 612;
 const PAGE_H = 792;
