@@ -309,7 +309,18 @@ function PageCanvas({ tweaks, pageNum, fields, allFields, setFields, selection, 
             onClick={(e) => { if (e.target === e.currentTarget) setSelection(null); }}>
 
             {backgroundUrl && (
-              <img src={backgroundUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+              // Browsers can't render PDFs as <img>. Use <iframe> with the
+              // PDF "open parameters" fragment so each page of the canvas
+              // shows its corresponding page of the background PDF; toolbars
+              // and scrollbars are hidden so it acts as a true backdrop.
+              <iframe
+                src={`${backgroundUrl}#page=${pageNum}&toolbar=0&navpanes=0&scrollbar=0&view=Fit`}
+                title={`Background page ${pageNum}`}
+                style={{
+                  position: 'absolute', inset: 0, width: '100%', height: '100%',
+                  border: 'none', pointerEvents: 'none', background: '#fff',
+                }}
+              />
             )}
 
             {tweaks.showGrid && <GridOverlay width={W} height={H} zoom={zoom} />}
