@@ -5,6 +5,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Icon } from './icons.jsx';
 import { CanvasArea, RightPropsPanel } from './canvas.jsx';
+import { btnGhost } from './styles.js';
 
 const PX_PER_PT = 1;
 const PAGE_W = 612;  // letter portrait (pts)
@@ -373,15 +374,6 @@ function SettingsTab({ model, template }) {
     </div>
   );
 }
-
-// Export for builder-app.jsx
-// ── Shared globals consumed by canvas.jsx ──────────────────────────────────
-// These mirror the style objects the prototype exported from app.jsx.
-const btnGhost = {
-  height: 34, padding: '0 12px', borderRadius: 7, color: 'var(--text-2)',
-  fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6,
-  border: '1px solid var(--border)', background: 'var(--surface)',
-};
 
 function IconBtn({ name, title, onClick, active }) {
   return (
