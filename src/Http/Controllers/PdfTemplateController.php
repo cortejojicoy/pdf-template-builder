@@ -36,7 +36,11 @@ class PdfTemplateController extends Controller
         $template = PdfTemplate::findOrFail($id);
         $this->authorize('update', $template);
 
-        $validated = $request->validate([
+        // Validate structure only. Field-shape properties (bind, text, url,
+        // format, checked, value, fill, stroke, …) vary per `kind` and are
+        // preserved verbatim from the request — listing them here would strip
+        // any not-yet-known keys from $validated.
+        $request->validate([
             'name'                  => 'sometimes|string|max:255',
             'fields'                => 'sometimes|array',
             'fields.*.id'           => 'required_with:fields|string|max:64',
@@ -46,14 +50,6 @@ class PdfTemplateController extends Controller
             'fields.*.w'            => 'required_with:fields|numeric|min:0',
             'fields.*.h'            => 'required_with:fields|numeric|min:0',
             'fields.*.page'         => 'sometimes|integer|min:0',
-            'fields.*.key'          => 'sometimes|nullable|string|max:255',
-            'fields.*.label'        => 'sometimes|nullable|string|max:255',
-            'fields.*.fontSize'     => 'sometimes|nullable|numeric|min:1|max:512',
-            'fields.*.fontFamily'   => 'sometimes|nullable|string|max:64',
-            'fields.*.color'        => 'sometimes|nullable|string|max:32',
-            'fields.*.align'        => 'sometimes|nullable|in:left,center,right',
-            'fields.*.bold'         => 'sometimes|boolean',
-            'fields.*.italic'       => 'sometimes|boolean',
             'pages'                 => 'sometimes|integer|min:1|max:200',
             'page_size'             => 'sometimes|string|in:Letter,A4,Legal',
             'orientation'           => 'sometimes|string|in:portrait,landscape',
@@ -61,7 +57,15 @@ class PdfTemplateController extends Controller
             'used_in'               => 'sometimes|nullable|string|max:255',
         ]);
 
-        $template->update($validated);
+        $data = $request->only([
+            'name', 'pages', 'page_size', 'orientation', 'filename_pattern', 'used_in',
+        ]);
+
+        if ($request->has('fields')) {
+            $data['fields'] = $request->input('fields');
+        }
+
+        $template->update($data);
 
         return response()->json($this->templatePayload($template));
     }
@@ -76,8 +80,10 @@ class PdfTemplateController extends Controller
             'pdf' => 'required|file|mimes:pdf|mimetypes:application/pdf|max:10240',
         ]);
 
-        /** @var PdfTemplateBuilderPlugin $plugin */
-        $plugin = filament()->getPlugin('pdf-template-builder');
+        // Resolve the configured plugin singleton directly. The API routes
+        // run outside of any Filament panel, so filament()->getPlugin() would
+        // throw "Plugin … is not registered for panel".
+        $plugin = app(PdfTemplateBuilderPlugin::class);
         $disk   = $plugin->getDisk();
         $path   = $plugin->getUploadPath();
 
@@ -103,8 +109,7 @@ class PdfTemplateController extends Controller
         $template = PdfTemplate::findOrFail($id);
         $this->authorize('view', $template);
 
-        /** @var PdfTemplateBuilderPlugin $plugin */
-        $plugin   = filament()->getPlugin('pdf-template-builder');
+        $plugin   = app(PdfTemplateBuilderPlugin::class);
         $modelDef = $plugin->getModels()[$template->model_key] ?? null;
 
         $sample = [];
@@ -128,7 +133,7 @@ class PdfTemplateController extends Controller
         $this->authorize('delete', $template);
 
         if ($template->background_pdf) {
-            $disk = $template->disk ?: filament()->getPlugin('pdf-template-builder')->getDisk();
+            $disk = $template->disk ?: app(PdfTemplateBuilderPlugin::class)->getDisk();
             Storage::disk($disk)->delete($template->background_pdf);
         }
 
