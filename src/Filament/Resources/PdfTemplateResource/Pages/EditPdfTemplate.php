@@ -24,9 +24,11 @@ class EditPdfTemplate extends Page
         return 'pdf-template-builder::pages.edit-pdf-template';
     }
 
-    public function mount(int|string $record): void
+    public function mount(int|string|PdfTemplate $record): void
     {
-        $this->record = PdfTemplate::findOrFail($record);
+        $this->record = $record instanceof PdfTemplate
+            ? $record
+            : PdfTemplate::findOrFail($record);
 
         static::authorizeResourceAccess();
     }
