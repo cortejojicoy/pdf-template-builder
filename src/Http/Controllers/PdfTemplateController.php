@@ -39,7 +39,7 @@ class PdfTemplateController extends Controller
             'name'                  => 'sometimes|string|max:255',
             'fields'                => 'sometimes|array',
             'fields.*.id'           => 'required_with:fields|string|max:64',
-            'fields.*.type'         => 'required_with:fields|string|max:32',
+            'fields.*.kind'         => 'required_with:fields|string|max:32',
             'fields.*.x'            => 'required_with:fields|numeric',
             'fields.*.y'            => 'required_with:fields|numeric',
             'fields.*.w'            => 'required_with:fields|numeric|min:0',
