@@ -12,5 +12,6 @@ Route::prefix('pdf-builder/api')
         Route::get('/templates/{id}',          [PdfTemplateController::class, 'show'])->name('templates.show');
         Route::put('/templates/{id}',          [PdfTemplateController::class, 'update'])->name('templates.update');
         Route::delete('/templates/{id}',       [PdfTemplateController::class, 'destroy'])->name('templates.destroy');
+        Route::get('/templates/{id}/preview',  [PdfTemplateController::class, 'preview'])->name('templates.preview');
         Route::post('/templates/{id}/upload',  [PdfTemplateController::class, 'upload'])->name('templates.upload');
     });
