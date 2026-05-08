@@ -70,8 +70,8 @@ class HtmlTemplateRenderer
             $this->typographyStyle($field),
         );
 
-        $type    = $field['type'] ?? 'text';
-        $content = $this->fieldContent($type, $field, $resolver);
+        $kind    = $field['kind'] ?? 'text';
+        $content = $this->fieldContent($kind, $field, $resolver);
 
         return sprintf('<div style="%s">%s</div>', e($style), $content);
     }
