@@ -71,6 +71,13 @@ function App() {
     }
   }, [template.id]);
 
+  const handlePreview = useCallback(async () => {
+    if (!saved && window.__builderSave) {
+      await window.__builderSave();
+    }
+    window.open(`${API}/templates/${template.id}/preview`, '_blank', 'noopener');
+  }, [template.id, saved]);
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--text)' }}>
       <BuilderTopBar
@@ -80,6 +87,7 @@ function App() {
         error={error}
         listUrl={LIST_URL}
         onSave={() => window.__builderSave && window.__builderSave()}
+        onPreview={handlePreview}
       />
 
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
@@ -104,7 +112,7 @@ function App() {
   );
 }
 
-function BuilderTopBar({ template, saved, saving, error, listUrl, onSave }) {
+function BuilderTopBar({ template, saved, saving, error, listUrl, onSave, onPreview }) {
   return (
     <header style={{
       height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12,
@@ -135,11 +143,13 @@ function BuilderTopBar({ template, saved, saving, error, listUrl, onSave }) {
         <span>{saving ? 'Saving…' : error ? 'Error' : saved ? 'All changes saved' : 'Unsaved changes'}</span>
       </div>
 
-      <button style={{
-        height: 34, padding: '0 12px', borderRadius: 7, color: 'var(--text-2)',
-        fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6,
-        border: '1px solid var(--border)', background: 'var(--surface)',
-      }}>
+      <button onClick={onPreview} disabled={saving}
+        style={{
+          height: 34, padding: '0 12px', borderRadius: 7, color: 'var(--text-2)',
+          fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6,
+          border: '1px solid var(--border)', background: 'var(--surface)',
+          opacity: saving ? 0.7 : 1, cursor: saving ? 'wait' : 'pointer',
+        }}>
         <Icon name="eye" size={15} /> Preview
       </button>
 
