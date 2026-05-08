@@ -9,6 +9,7 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Storage;
 use Kukux\PdfTemplateBuilder\Models\PdfTemplate;
 use Kukux\PdfTemplateBuilder\PdfTemplateBuilderPlugin;
+use Symfony\Component\HttpFoundation\Response;
 
 class PdfTemplateController extends Controller
 {
@@ -94,6 +95,30 @@ class PdfTemplateController extends Controller
         return response()->json([
             'background_url' => $template->fresh()->background_url,
         ]);
+    }
+
+    /** GET /pdf-builder/api/templates/{id}/preview — render PDF with sample data, inline */
+    public function preview(int $id): Response
+    {
+        $template = PdfTemplate::findOrFail($id);
+        $this->authorize('view', $template);
+
+        /** @var PdfTemplateBuilderPlugin $plugin */
+        $plugin   = filament()->getPlugin('pdf-template-builder');
+        $modelDef = $plugin->getModels()[$template->model_key] ?? null;
+
+        $sample = [];
+        foreach ($modelDef['fields'] ?? [] as $f) {
+            $key = $f['key'] ?? '';
+            $rel = ($template->model_key && str_starts_with($key, $template->model_key . '.'))
+                ? substr($key, strlen($template->model_key) + 1)
+                : $key;
+            if ($rel !== '') {
+                data_set($sample, $rel, $f['sample'] ?? '');
+            }
+        }
+
+        return $template->stream($sample);
     }
 
     /** DELETE /pdf-builder/api/templates/{id} */
