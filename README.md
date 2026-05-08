@@ -110,7 +110,40 @@ Alternatively, configure them in `config/pdf-template-builder.php` after publish
 php artisan vendor:publish --tag=pdf-template-builder-config
 ```
 
-## 6. (Optional) Configure storage
+## 6. (Optional) Customize sidebar navigation
+
+You can place the "PDF Templates" entry inside a Filament navigation group and control its sort order:
+
+```php
+->plugin(
+    PdfTemplateBuilderPlugin::make()
+        ->navigationGroup('Documents') // must be a string, never null
+        ->navigationSort(50)
+)
+```
+
+Or via the published config (`config/pdf-template-builder.php`):
+
+```php
+'navigation_group' => 'Documents', // string only — leave as '' to disable grouping, do NOT set to null
+```
+
+> **Heads up — avoid this error**
+>
+> ```
+> Kukux\PdfTemplateBuilder\PdfTemplateBuilderPlugin::getNavigationGroup():
+> Return value must be of type string, null returned
+> ```
+>
+> This is thrown when `config('pdf-template-builder.navigation_group')` resolves to `null`. To prevent it:
+>
+> - If you published the config before v1.2.0, open `config/pdf-template-builder.php` and change `'navigation_group' => null` to `'navigation_group' => ''` (or to your preferred group name).
+> - Or set `PDF_TEMPLATE_NAVIGATION_GROUP=""` in your `.env` rather than leaving it unset.
+> - Or call `->navigationGroup('')` explicitly when registering the plugin.
+>
+> The same applies if you override the value at runtime — always pass a string, never `null`.
+
+## 7. (Optional) Configure storage
 
 By default PDF backgrounds are stored on the `public` disk under `pdf-templates/backgrounds/`. Override via the plugin or `.env`:
 
