@@ -2,6 +2,10 @@
 
 namespace Kukux\PdfTemplateBuilder\Filament\Resources\V4;
 
+use Filament\Actions\Action;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
@@ -153,17 +157,17 @@ class PdfTemplateResource extends Resource
                         collect($models)->mapWithKeys(fn ($m, $k) => [$k => $m['label'] ?? $k])->all()
                     ),
             ])
-            ->actions([
-                Tables\Actions\Action::make('edit_builder')
+            ->recordActions([
+                Action::make('edit_builder')
                     ->label('Open Builder')
                     ->icon('heroicon-o-pencil-square')
                     ->url(fn (PdfTemplate $r) => static::getUrl('edit', ['record' => $r])),
 
-                Tables\Actions\DeleteAction::make(),
+                DeleteAction::make(),
             ])
-            ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    DeleteBulkAction::make(),
                 ]),
             ])
             ->defaultSort('updated_at', 'desc');
