@@ -108,13 +108,13 @@ class FpdiEngine implements TemplateAwarePdfEngine
 
     protected function drawField(Fpdi $pdf, array $field, FieldResolver $resolver): void
     {
-        $type = $field['type'] ?? 'text';
+        $kind = $field['kind'] ?? 'text';
         $x = (float) ($field['x'] ?? 0);
         $y = (float) ($field['y'] ?? 0);
         $w = (float) ($field['w'] ?? 0);
         $h = (float) ($field['h'] ?? 0);
 
-        switch ($type) {
+        switch ($kind) {
             case 'image':
             case 'signature':
                 $url = $field['url'] ?? null;
