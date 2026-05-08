@@ -5,6 +5,9 @@ import { resolve } from 'path';
 // Single self-contained IIFE bundle published to public/vendor/pdf-template-builder/
 export default defineConfig({
   plugins: [react()],
+  define: {
+    'process.env.NODE_ENV': JSON.stringify('production'),
+  },
   build: {
     outDir: 'resources/dist',
     emptyOutDir: true,
