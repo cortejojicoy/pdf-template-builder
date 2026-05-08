@@ -4,7 +4,15 @@ use Illuminate\Support\Facades\Route;
 use Kukux\PdfTemplateBuilder\Http\Controllers\PdfTemplateController;
 
 Route::prefix('pdf-builder/api')
-    ->middleware(['web', 'auth'])
+    ->middleware([
+        'web',
+        function ($request, $next) {
+            if (! auth()->check()) {
+                return response()->json(['message' => 'Unauthenticated.'], 401);
+            }
+            return $next($request);
+        },
+    ])
     ->name('pdf-builder.api.')
     ->group(function () {
         Route::get('/',                        [PdfTemplateController::class, 'base'])->name('base');
