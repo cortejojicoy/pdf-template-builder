@@ -63,14 +63,23 @@
             --shadow-md:        var(--pdf-shadow-md);
             --shadow-lg:        var(--pdf-shadow-lg);
 
-            /* Full-height within the Filament content area */
+            /* Full-width and full-height within the Filament content area */
             display: block;
+            width: 100%;
             height: calc(100vh - 4rem);   /* minus Filament topbar ~4rem */
+            min-height: 400px;
             overflow: hidden;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             font-size: 14px;
             line-height: 1.5;
             -webkit-font-smoothing: antialiased;
+        
+        /* Responsive adjustments */
+        @media (max-width: 639px) {
+            #pdf-builder-root {
+                height: calc(80vh - 4rem); /* Reduced height on small screens */
+                font-size: 13px;
+            }
         }
         #pdf-builder-root * { box-sizing: border-box; }
         #pdf-builder-root button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
