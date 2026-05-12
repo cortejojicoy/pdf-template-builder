@@ -118,9 +118,15 @@ class PdfTemplateController extends Controller
             $rel = ($template->model_key && str_starts_with($key, $template->model_key . '.'))
                 ? substr($key, strlen($template->model_key) + 1)
                 : $key;
-            if ($rel !== '') {
-                data_set($sample, $rel, $f['sample'] ?? '');
+            if ($rel === '') {
+                return;
             }
+            // Fall back to label, then to the trailing token, so the preview
+            // always shows *something* even when a `sample` wasn't provided.
+            $value = $f['sample']
+                ?? $f['label']
+                ?? (str_contains($rel, '.') ? substr($rel, strrpos($rel, '.') + 1) : $rel);
+            data_set($sample, $rel, $value);
         };
 
         foreach ($modelDef['fields'] ?? [] as $f) {
