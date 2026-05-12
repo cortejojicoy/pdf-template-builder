@@ -113,13 +113,22 @@ class PdfTemplateController extends Controller
         $modelDef = $plugin->getModels()[$template->model_key] ?? null;
 
         $sample = [];
-        foreach ($modelDef['fields'] ?? [] as $f) {
+        $assign = function (array $f) use ($template, &$sample) {
             $key = $f['key'] ?? '';
             $rel = ($template->model_key && str_starts_with($key, $template->model_key . '.'))
                 ? substr($key, strlen($template->model_key) + 1)
                 : $key;
             if ($rel !== '') {
                 data_set($sample, $rel, $f['sample'] ?? '');
+            }
+        };
+
+        foreach ($modelDef['fields'] ?? [] as $f) {
+            $assign($f);
+        }
+        foreach ($modelDef['relations'] ?? [] as $relation) {
+            foreach ($relation['fields'] ?? [] as $f) {
+                $assign($f);
             }
         }
 
