@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Kukux\PdfTemplateBuilder\Rendering\Contracts\PdfEngine;
 use Kukux\PdfTemplateBuilder\Rendering\Contracts\TemplateAwarePdfEngine;
+use Kukux\PdfTemplateBuilder\Rendering\Engines\FpdiEngine;
 use Kukux\PdfTemplateBuilder\Rendering\FieldResolver;
 use Kukux\PdfTemplateBuilder\Rendering\HtmlTemplateRenderer;
 use Symfony\Component\HttpFoundation\Response;
@@ -74,6 +75,13 @@ class PdfTemplate extends Model
      */
     public function stream(mixed $record, array $contexts = [], ?PdfEngine $engine = null): Response
     {
+        // When the template has a PDF background and fpdi/tcpdf are installed,
+        // prefer FpdiEngine — it stamps fields onto the original PDF (true
+        // overlay). The default HTML/dompdf path can't render PDFs as CSS
+        // backgrounds, so the upload would otherwise be invisible.
+        if ($engine === null && $this->background_pdf && class_exists(\setasign\Fpdi\Tcpdf\Fpdi::class)) {
+            $engine = app(FpdiEngine::class);
+        }
         $engine ??= app(PdfEngine::class);
 
         $options = [
