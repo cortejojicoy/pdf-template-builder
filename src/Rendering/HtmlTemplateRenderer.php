@@ -32,22 +32,26 @@ class HtmlTemplateRenderer
             [$pageW, $pageH] = [$pageH, $pageW];
         }
 
-        $resolver = new FieldResolver($record, $template->model_key, $contexts);
-        $catalog  = $this->buildFieldCatalog($template);
-        $fields   = $template->fields ?? [];
-        $pages    = max(1, (int) ($template->pages ?? 1));
+        $resolver   = new FieldResolver($record, $template->model_key, $contexts);
+        $catalog    = $this->buildFieldCatalog($template);
+        $fields     = $template->fields ?? [];
+        $pages      = max(1, (int) ($template->pages ?? 1));
+        $pageOffset = $this->detectPageOffset($fields);
 
         $body = '';
         for ($p = 0; $p < $pages; $p++) {
-            $body .= $this->renderPage($p, $pages, $pageW, $pageH, $fields, $resolver, $catalog);
+            $body .= $this->renderPage($p, $pages, $pageW, $pageH, $fields, $resolver, $catalog, $pageOffset);
         }
 
         return $this->document($template, $pageW, $pageH, $body);
     }
 
-    protected function renderPage(int $page, int $totalPages, float $w, float $h, array $fields, FieldResolver $resolver, array $catalog): string
+    protected function renderPage(int $page, int $totalPages, float $w, float $h, array $fields, FieldResolver $resolver, array $catalog, int $pageOffset): string
     {
-        $pageFields = array_filter($fields, fn ($f) => ((int) ($f['page'] ?? 0)) === $page);
+        $pageFields = array_filter(
+            $fields,
+            fn ($f) => ((int) ($f['page'] ?? 0)) - $pageOffset === $page,
+        );
 
         $html = sprintf(
             '<div class="pdf-page" style="position:relative;width:%spt;height:%spt;page-break-after:always;overflow:hidden;">',
@@ -59,6 +63,26 @@ class HtmlTemplateRenderer
         }
 
         return $html . '</div>';
+    }
+
+    /**
+     * The React builder stores `page` as 1-indexed (the UI's `currentPage`,
+     * which starts at 1), while legacy fixtures and the renderer's loop use
+     * 0-indexed pages. Detect which convention the saved fields use.
+     */
+    protected function detectPageOffset(array $fields): int
+    {
+        $maxPage = 0;
+        foreach ($fields as $f) {
+            $fp = (int) ($f['page'] ?? 0);
+            if ($fp === 0) {
+                return 0; // a zero appears → already 0-indexed
+            }
+            if ($fp > $maxPage) {
+                $maxPage = $fp;
+            }
+        }
+        return $maxPage >= 1 ? 1 : 0;
     }
 
     protected function renderField(array $field, FieldResolver $resolver, array $catalog, int $page, int $totalPages): string
