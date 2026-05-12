@@ -158,20 +158,27 @@ function Sidebar({ model, activeTab, onTab, fields, selection, onSelect, onStart
   ];
 
   return (
-    <aside style={{ width: 264, flexShrink: 0, borderRight: '1px solid var(--border)',
+    <aside style={{ width: 272, flexShrink: 0, borderRight: '1px solid var(--border)',
       background: 'var(--surface)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '8px 8px 0' }}>
-        {tabs.map((t) => (
-          <button key={t.id} onClick={() => onTab(t.id)}
-            style={{
-              flex: 1, padding: '8px 4px 10px', fontSize: 12, fontWeight: 500,
-              color: activeTab === t.id ? 'var(--accent)' : 'var(--muted)',
-              borderBottom: activeTab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, marginBottom: -1,
-            }}>
-            <Icon name={t.icon} size={15} /> {t.label}
-          </button>
-        ))}
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '0 4px' }}>
+        {tabs.map((t) => {
+          const active = activeTab === t.id;
+          return (
+            <button key={t.id} onClick={() => onTab(t.id)}
+              style={{
+                flex: 1, padding: '10px 4px 12px', fontSize: 11.5, fontWeight: 500,
+                color: active ? 'var(--accent)' : 'var(--muted)',
+                borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+                marginBottom: -1, transition: 'color .15s ease',
+              }}
+              onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = 'var(--text-2)'; }}
+              onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = 'var(--muted)'; }}>
+              <Icon name={t.icon} size={16} />
+              <span>{t.label}</span>
+            </button>
+          );
+        })}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {activeTab === 'fields'   && <FieldsTab model={model} onStartDrag={onStartDrag} />}
@@ -182,6 +189,17 @@ function Sidebar({ model, activeTab, onTab, fields, selection, onSelect, onStart
     </aside>
   );
 }
+
+// Shared Filament-style input focus ring.
+const fieldFocus = {
+  onFocus: (e) => { e.target.style.borderColor = 'var(--accent)'; e.target.style.boxShadow = '0 0 0 3px var(--accent-soft)'; },
+  onBlur:  (e) => { e.target.style.borderColor = 'var(--border)'; e.target.style.boxShadow = 'none'; },
+};
+const filInput = {
+  width: '100%', height: 36, padding: '0 12px', fontSize: 13,
+  border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface)',
+  outline: 'none', transition: 'border-color .15s ease, box-shadow .15s ease',
+};
 
 // ───── Fields tab ─────
 function FieldsTab({ model, onStartDrag }) {
@@ -194,22 +212,20 @@ function FieldsTab({ model, onStartDrag }) {
   })).filter((r) => r.fields.length);
 
   return (
-    <div style={{ padding: '10px 10px' }}>
-      <div style={{ marginBottom: 8 }}>
-        <div style={{ position: 'relative' }}>
-          <Icon name="search" size={12} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-2)' }} />
-          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter fields…"
-            style={{ width: '100%', height: 28, padding: '0 8px 0 26px', fontSize: 12,
-              border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface-2)', outline: 'none' }} />
-        </div>
+    <div style={{ padding: 12 }}>
+      <div style={{ position: 'relative', marginBottom: 10 }}>
+        <Icon name="search" size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-2)' }} />
+        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search fields"
+          {...fieldFocus}
+          style={{ ...filInput, paddingLeft: 34 }} />
       </div>
       <FieldGroup title={model.name} fields={primary} onStartDrag={onStartDrag} />
       {relations.map((r) => (
         <FieldGroup key={r.key} title={r.label || r.key} subtitle="relation" fields={r.fields} onStartDrag={onStartDrag} />
       ))}
       {primary.length === 0 && relations.length === 0 && (
-        <div style={{ padding: '20px 8px', textAlign: 'center', fontSize: 12, color: 'var(--muted)' }}>
-          No fields match your filter.
+        <div style={{ padding: '32px 12px', textAlign: 'center', fontSize: 13, color: 'var(--muted)' }}>
+          No fields match your search.
         </div>
       )}
     </div>
@@ -219,16 +235,29 @@ function FieldsTab({ model, onStartDrag }) {
 function FieldGroup({ title, subtitle, fields, onStartDrag }) {
   const [open, setOpen] = useState(true);
   return (
-    <div style={{ marginBottom: 10 }}>
+    <div style={{ marginBottom: 6 }}>
       <button onClick={() => setOpen((o) => !o)}
-        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6,
-          padding: '4px 4px', fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>
-        <Icon name={open ? 'chevron-down' : 'chevron-right'} size={10} />
-        <span>{title}</span>
-        {subtitle && <span style={{ fontWeight: 400, textTransform: 'none', color: 'var(--muted-2)', letterSpacing: 0 }}>· {subtitle}</span>}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 10px', fontSize: 12.5, fontWeight: 600, color: 'var(--text)',
+          borderRadius: 6, textAlign: 'left', transition: 'background .12s ease',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-2)'}
+        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+        <Icon name={open ? 'chevron-down' : 'chevron-right'} size={12} style={{ color: 'var(--muted-2)', flexShrink: 0 }} />
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
+          {(title || '').toString().replace(/_/g, ' ')}
+        </span>
+        {subtitle && (
+          <span style={{
+            fontWeight: 500, fontSize: 9.5, color: 'var(--muted)', textTransform: 'uppercase',
+            letterSpacing: 0.5, padding: '2px 6px', borderRadius: 4, background: 'var(--surface-2)',
+            border: '1px solid var(--border)',
+          }}>{subtitle}</span>
+        )}
       </button>
       {open && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 2, paddingLeft: 4 }}>
           {fields.map((f) => <FieldChip key={f.key} field={f} onStartDrag={onStartDrag} />)}
         </div>
       )}
@@ -245,19 +274,24 @@ function FieldChip({ field, onStartDrag }) {
       onPointerDown={(e) => onStartDrag({ kind: 'bound', bind: field.key, label: field.label, clientX: e.clientX, clientY: e.clientY })}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
+        display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px',
         borderRadius: 6, cursor: 'grab', userSelect: 'none',
-        background: hov ? 'var(--surface-2)' : 'transparent',
-        border: '1px solid ' + (hov ? 'var(--border)' : 'transparent'),
+        background: hov ? 'var(--accent-soft)' : 'transparent',
+        transition: 'background .12s ease',
       }}>
-      <div style={{ width: 20, height: 20, borderRadius: 4, background: 'var(--accent-soft)', color: 'var(--accent)', display: 'grid', placeItems: 'center' }}>
-        <Icon name={typeIcon} size={11} />
+      <div style={{
+        width: 26, height: 26, borderRadius: 6, flexShrink: 0,
+        background: hov ? 'var(--accent)' : 'var(--accent-soft)',
+        color: hov ? '#fff' : 'var(--accent)',
+        display: 'grid', placeItems: 'center', transition: 'all .12s ease',
+      }}>
+        <Icon name={typeIcon} size={12} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{field.label}</div>
-        <div className="mono" style={{ fontSize: 10.5, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{field.key}</div>
+        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{field.label}</div>
+        <div className="mono" style={{ fontSize: 10.5, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>{field.key}</div>
       </div>
-      <Icon name="move" size={11} style={{ color: 'var(--muted-2)', opacity: hov ? 1 : 0 }} />
+      <Icon name="move" size={12} style={{ color: 'var(--muted-2)', opacity: hov ? 0.7 : 0, flexShrink: 0, transition: 'opacity .12s ease' }} />
     </div>
   );
 }
@@ -277,18 +311,20 @@ const STATIC_ELEMENTS = [
 
 function ElementsTab({ onStartDrag }) {
   return (
-    <div style={{ padding: '10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+    <div style={{ padding: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
       {STATIC_ELEMENTS.map((el) => (
         <button key={el.kind}
           onPointerDown={(e) => onStartDrag({ kind: el.kind, label: el.label, clientX: e.clientX, clientY: e.clientY })}
           style={{
-            padding: '12px 8px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--surface)',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'grab',
+            padding: '16px 8px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)',
+            color: 'var(--text-2)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'grab',
+            transition: 'all .12s ease',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-soft)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--surface)'; }}>
-          <Icon name={el.icon} size={18} style={{ color: 'var(--text-2)' }} />
-          <div style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text-2)' }}>{el.label}</div>
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-soft)'; e.currentTarget.style.color = 'var(--accent)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--surface)'; e.currentTarget.style.color = 'var(--text-2)'; }}>
+          <Icon name={el.icon} size={18} />
+          <div style={{ fontSize: 12, fontWeight: 500 }}>{el.label}</div>
         </button>
       ))}
     </div>
@@ -304,10 +340,11 @@ function LayersTab({ fields, selection, onSelect }) {
     rect: 'square', image: 'image', signature: 'pen', checkbox: 'check-square', qr: 'qr', 'page-number': 'hash' }[k] || 'square');
 
   return (
-    <div style={{ padding: '6px' }}>
+    <div style={{ padding: 10 }}>
       {fields.length === 0 && (
-        <div style={{ padding: '20px 8px', textAlign: 'center', fontSize: 12, color: 'var(--muted)' }}>
-          No elements on this page yet.
+        <div style={{ padding: '32px 12px', textAlign: 'center', fontSize: 13, color: 'var(--muted)' }}>
+          No elements yet
+          <div style={{ fontSize: 11.5, marginTop: 4, color: 'var(--muted-2)' }}>Drag fields or elements onto the canvas.</div>
         </div>
       )}
       {fields.slice().reverse().map((f) => {
@@ -315,17 +352,18 @@ function LayersTab({ fields, selection, onSelect }) {
         return (
           <button key={f.id} onClick={() => onSelect(f.id)}
             style={{
-              width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
-              borderRadius: 5, textAlign: 'left',
+              width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+              borderRadius: 6, textAlign: 'left', marginBottom: 1,
               background: sel ? 'var(--accent-soft)' : 'transparent',
               color: sel ? 'var(--accent)' : 'var(--text-2)',
+              transition: 'background .12s ease',
             }}
             onMouseEnter={(e) => { if (!sel) e.currentTarget.style.background = 'var(--surface-2)'; }}
             onMouseLeave={(e) => { if (!sel) e.currentTarget.style.background = 'transparent'; }}>
-            <Icon name={icon(f.kind)} size={12} style={{ color: sel ? 'var(--accent)' : 'var(--muted)' }} />
-            <span style={{ flex: 1, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            <Icon name={icon(f.kind)} size={13} style={{ color: sel ? 'var(--accent)' : 'var(--muted)', flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
               className={f.kind === 'bound' ? 'mono' : ''}>{labelFor(f)}</span>
-            <span style={{ fontSize: 10, color: 'var(--muted-2)' }}>{Math.round(f.w)}×{Math.round(f.h)}</span>
+            <span className="mono" style={{ fontSize: 10.5, color: sel ? 'var(--accent)' : 'var(--muted-2)' }}>{Math.round(f.w)}×{Math.round(f.h)}</span>
           </button>
         );
       })}
@@ -335,41 +373,46 @@ function LayersTab({ fields, selection, onSelect }) {
 
 // ───── Settings tab ─────
 function SettingsTab({ model, template }) {
-  const Row = ({ label, children }) => (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>{label}</div>
+  const Row = ({ label, hint, children }) => (
+    <div style={{ marginBottom: 16 }}>
+      <label style={{ display: 'block', fontSize: 12.5, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>{label}</label>
       {children}
+      {hint && <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 6 }}>{hint}</div>}
     </div>
   );
-  const inp = { width: '100%', height: 30, padding: '0 10px', border: '1px solid var(--border)', background: 'var(--surface-2)', borderRadius: 6, fontSize: 12, outline: 'none' };
   return (
-    <div style={{ padding: '14px' }}>
-      <Row label="Template name"><input style={inp} defaultValue={template.name} /></Row>
+    <div style={{ padding: 14 }}>
+      <Row label="Template name">
+        <input style={filInput} defaultValue={template.name} {...fieldFocus} />
+      </Row>
       <Row label="Bound model">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', border: '1px solid var(--border)', background: 'var(--surface-2)', borderRadius: 6 }}>
-          <Icon name={model.icon} size={13} style={{ color: 'var(--accent)' }} />
-          <span style={{ fontSize: 12, fontWeight: 500 }}>{model.name}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, padding: '0 12px',
+          border: '1px solid var(--border)', background: 'var(--surface-2)', borderRadius: 8 }}>
+          <Icon name={model.icon} size={14} style={{ color: 'var(--accent)' }} />
+          <span style={{ fontSize: 13, fontWeight: 500 }}>{model.name}</span>
         </div>
       </Row>
       <Row label="Page size">
-        <select style={inp} defaultValue={template.page_size || 'Letter'}>
+        <select style={filInput} defaultValue={template.page_size || 'Letter'} {...fieldFocus}>
           <option value="Letter">Letter (8.5 × 11 in)</option>
           <option value="A4">A4</option>
           <option value="Legal">Legal</option>
         </select>
       </Row>
       <Row label="Margins (pt)">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
           {['T','R','B','L'].map((l) => (
             <div key={l} style={{ position: 'relative' }}>
-              <input style={{ ...inp, paddingLeft: 22 }} defaultValue="48" />
-              <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: 'var(--muted-2)', fontWeight: 600 }}>{l}</span>
+              <input style={{ ...filInput, paddingLeft: 26 }} defaultValue="48" {...fieldFocus} />
+              <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+                fontSize: 10, color: 'var(--muted-2)', fontWeight: 700, pointerEvents: 'none' }}>{l}</span>
             </div>
           ))}
         </div>
       </Row>
-      <Row label="Filename pattern">
-        <input className="mono" style={{ ...inp, fontSize: 11 }} defaultValue={template.filename_pattern || '{{id}}.pdf'} />
+      <Row label="Filename pattern" hint="Use {{token}} placeholders for dynamic values.">
+        <input className="mono" style={{ ...filInput, fontSize: 12 }}
+          defaultValue={template.filename_pattern || '{{id}}.pdf'} {...fieldFocus} />
       </Row>
     </div>
   );

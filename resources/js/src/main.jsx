@@ -113,57 +113,50 @@ function App() {
 }
 
 function BuilderTopBar({ template, saved, saving, error, listUrl, onSave, onPreview }) {
-  return (
-    <header style={{
-      height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12,
-      padding: '0 16px', borderBottom: '1px solid var(--border)', background: 'var(--surface)',
-      whiteSpace: 'nowrap', minWidth: 0,
-    }}>
-      <a href={listUrl}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px', borderRadius: 4,
-          color: 'var(--muted)', fontSize: 13, textDecoration: 'none' }}>
-        <Icon name="chevron-left" size={14} />
-        PDF Templates
-      </a>
+   return (
+     <header style={{
+       height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12,
+       padding: '0 16px', borderBottom: '1px solid var(--border)', background: 'var(--surface)',
+       whiteSpace: 'nowrap', minWidth: 0,
+     }}>
+       <span style={{ padding: '4px 6px', color: 'var(--text)', fontWeight: 500, fontSize: 13,
+         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>
+         {template.name || 'Untitled'}
+       </span>
 
-      <Icon name="chevron-right" size={14} style={{ opacity: .4 }} />
+       <button onClick={onPreview} disabled={saving}
+         style={{
+           height: 34, padding: '0 12px', borderRadius: 7, color: 'var(--text-2)',
+           fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6,
+           border: '1px solid var(--border)', background: 'var(--surface)',
+           opacity: saving ? 0.7 : 1, cursor: saving ? 'wait' : 'pointer',
+           flexShrink: 0,
+         }}>
+         <Icon name="eye" size={15} /> Preview
+       </button>
 
-      <span style={{ padding: '4px 6px', color: 'var(--text)', fontWeight: 500, fontSize: 13,
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>
-        {template.name || 'Untitled'}
-      </span>
+       <button onClick={onSave} disabled={saving}
+         style={{
+           height: 34, padding: '0 14px', borderRadius: 7, background: 'var(--accent)', color: '#fff',
+           fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6,
+           opacity: saving ? 0.7 : 1, cursor: saving ? 'wait' : 'pointer',
+           flexShrink: 0,
+         }}>
+         <Icon name="save" size={15} /> Save template
+       </button>
 
-      <div style={{ flex: 1, minWidth: 12 }} />
+       <div style={{ flex: 1, minWidth: 12 }} />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)', flexShrink: 0 }}>
-        <span style={{
-          display: 'inline-block', width: 6, height: 6, borderRadius: 3, flexShrink: 0,
-          background: error ? 'var(--danger)' : saved ? 'var(--success)' : 'var(--warning)',
-        }} />
-        <span>{saving ? 'Saving…' : error ? 'Error' : saved ? 'All changes saved' : 'Unsaved changes'}</span>
-      </div>
-
-      <button onClick={onPreview} disabled={saving}
-        style={{
-          height: 34, padding: '0 12px', borderRadius: 7, color: 'var(--text-2)',
-          fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6,
-          border: '1px solid var(--border)', background: 'var(--surface)',
-          opacity: saving ? 0.7 : 1, cursor: saving ? 'wait' : 'pointer',
-        }}>
-        <Icon name="eye" size={15} /> Preview
-      </button>
-
-      <button onClick={onSave} disabled={saving}
-        style={{
-          height: 34, padding: '0 14px', borderRadius: 7, background: 'var(--accent)', color: '#fff',
-          fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6,
-          opacity: saving ? 0.7 : 1, cursor: saving ? 'wait' : 'pointer',
-        }}>
-        <Icon name="save" size={15} /> Save template
-      </button>
-    </header>
-  );
-}
+       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)', flexShrink: 0 }}>
+         <span style={{
+           display: 'inline-block', width: 6, height: 6, borderRadius: 3, flexShrink: 0,
+           background: error ? 'var(--danger)' : saved ? 'var(--success)' : 'var(--warning)',
+         }} />
+         <span>{saving ? 'Saving…' : error ? 'Error' : saved ? 'All changes saved' : 'Unsaved changes'}</span>
+       </div>
+     </header>
+   );
+ }
 
 const root = document.getElementById('pdf-builder-root');
 if (root) {
