@@ -72,9 +72,6 @@ class EditPdfTemplate extends Page
 
     public function getBreadcrumbs(): array
     {
-        return [
-            static::getResource()::getUrl('index') => 'PDF Templates',
-            '#' => $this->record->name,
-        ];
+        return [];
     }
 }
