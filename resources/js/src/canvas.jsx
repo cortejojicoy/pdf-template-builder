@@ -1,10 +1,90 @@
 import React, { useState, useEffect, useRef } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
 import { Icon } from './icons.jsx';
 import { btnGhost } from './styles.js';
 
 const PAGE_W = 612;
 const PAGE_H = 792;
 const SNAP_PT = 4; // alignment-guide snap threshold in pts
+
+// pdf.js needs a Web Worker. We're built as an IIFE bundle (no import.meta.url
+// at runtime), so we point at a CDN copy pinned to the installed version.
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+
+const pdfDocCache = new Map();
+function loadPdfDocument(url) {
+  if (!pdfDocCache.has(url)) {
+    pdfDocCache.set(url, pdfjsLib.getDocument(url).promise);
+  }
+  return pdfDocCache.get(url);
+}
+
+// Renders a single page of a background PDF onto a <canvas>. Replaces the
+// previous <iframe> approach so it works in Brave / browsers whose built-in
+// PDF viewer refuses to embed (the "preview not available" case).
+function PdfBackground({ url, pageNum, width, height }) {
+  const canvasRef = useRef(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!url) return undefined;
+    let cancelled = false;
+    let renderTask = null;
+
+    loadPdfDocument(url)
+      .then(async (doc) => {
+        if (cancelled) return;
+        const safePage = Math.min(Math.max(1, pageNum), doc.numPages);
+        const page = await doc.getPage(safePage);
+        if (cancelled) return;
+
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const baseViewport = page.getViewport({ scale: 1 });
+        // Render at 2x of the box for crispness at common zoom levels;
+        // CSS scales the canvas to fit the page container exactly.
+        const scale = (Math.max(width, height) * 2) / Math.max(baseViewport.width, baseViewport.height);
+        const viewport = page.getViewport({ scale });
+
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+
+        const ctx = canvas.getContext('2d');
+        renderTask = page.render({ canvasContext: ctx, viewport });
+        await renderTask.promise;
+      })
+      .catch((e) => {
+        // pdfjs throws RenderingCancelledException when we cancel — ignore.
+        if (cancelled || (e && e.name === 'RenderingCancelledException')) return;
+        setError(e && e.message ? e.message : 'Failed to render background');
+      });
+
+    return () => {
+      cancelled = true;
+      if (renderTask) {
+        try { renderTask.cancel(); } catch (_) { /* noop */ }
+      }
+    };
+  }, [url, pageNum, width, height]);
+
+  if (error) {
+    return (
+      <div style={{
+        position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
+        color: '#9ca3af', fontSize: 12, padding: 16, textAlign: 'center', pointerEvents: 'none',
+      }}>Background PDF couldn't be rendered: {error}</div>
+    );
+  }
+
+  return (
+    <canvas ref={canvasRef} style={{
+      position: 'absolute', inset: 0, width: '100%', height: '100%',
+      pointerEvents: 'none', background: '#fff',
+    }} />
+  );
+}
 
 // ── Alignment guide computation ────────────────────────────────────────────────
 function computeGuides(nx, ny, w, h, allFields, selfId) {
@@ -309,18 +389,7 @@ function PageCanvas({ tweaks, pageNum, fields, allFields, setFields, selection, 
             onClick={(e) => { if (e.target === e.currentTarget) setSelection(null); }}>
 
             {backgroundUrl && (
-              // Browsers can't render PDFs as <img>. Use <iframe> with the
-              // PDF "open parameters" fragment so each page of the canvas
-              // shows its corresponding page of the background PDF; toolbars
-              // and scrollbars are hidden so it acts as a true backdrop.
-              <iframe
-                src={`${backgroundUrl}#page=${pageNum}&toolbar=0&navpanes=0&scrollbar=0&view=Fit`}
-                title={`Background page ${pageNum}`}
-                style={{
-                  position: 'absolute', inset: 0, width: '100%', height: '100%',
-                  border: 'none', pointerEvents: 'none', background: '#fff',
-                }}
-              />
+              <PdfBackground url={backgroundUrl} pageNum={pageNum} width={W} height={H} />
             )}
 
             {tweaks.showGrid && <GridOverlay width={W} height={H} zoom={zoom} />}
