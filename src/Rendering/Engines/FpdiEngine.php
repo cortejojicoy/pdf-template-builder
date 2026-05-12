@@ -5,6 +5,7 @@ namespace Kukux\PdfTemplateBuilder\Rendering\Engines;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Kukux\PdfTemplateBuilder\Models\PdfTemplate;
+use Kukux\PdfTemplateBuilder\PdfTemplateBuilderPlugin;
 use Kukux\PdfTemplateBuilder\Rendering\Contracts\TemplateAwarePdfEngine;
 use Kukux\PdfTemplateBuilder\Rendering\FieldResolver;
 use RuntimeException;
@@ -78,6 +79,7 @@ class FpdiEngine implements TemplateAwarePdfEngine
         }
 
         $resolver   = new FieldResolver($record, $template->model_key, $contexts);
+        $catalog    = $this->buildFieldCatalog($template);
         $totalPages = max(1, (int) ($template->pages ?? 1));
         $fields     = $template->fields ?? [];
 
@@ -93,7 +95,7 @@ class FpdiEngine implements TemplateAwarePdfEngine
                 if (((int) ($field['page'] ?? 0)) !== $p) {
                     continue;
                 }
-                $this->drawField($pdf, $field, $resolver);
+                $this->drawField($pdf, $field, $resolver, $catalog, $p, $totalPages);
             }
         }
 
@@ -106,9 +108,11 @@ class FpdiEngine implements TemplateAwarePdfEngine
         ]);
     }
 
-    protected function drawField(Fpdi $pdf, array $field, FieldResolver $resolver): void
+    protected function drawField(Fpdi $pdf, array $field, FieldResolver $resolver, array $catalog, int $page, int $totalPages): void
     {
-        $kind = $field['kind'] ?? 'text';
+        // Accept both the React builder's shape (`kind`) and the legacy
+        // shape used by older fixtures (`type`).
+        $kind = $field['kind'] ?? $field['type'] ?? 'text';
         $x = (float) ($field['x'] ?? 0);
         $y = (float) ($field['y'] ?? 0);
         $w = (float) ($field['w'] ?? 0);
@@ -118,8 +122,8 @@ class FpdiEngine implements TemplateAwarePdfEngine
             case 'image':
             case 'signature':
                 $url = $field['url'] ?? null;
-                if (! empty($field['key'])) {
-                    $resolved = $resolver->resolve($field['key']);
+                if (! empty($field['bind'])) {
+                    $resolved = $resolver->resolve($field['bind']);
                     if (is_string($resolved) && $resolved !== '') {
                         $url = $resolved;
                     }
@@ -141,9 +145,13 @@ class FpdiEngine implements TemplateAwarePdfEngine
                 $pdf->Line($x, $y + $h / 2, $x + $w, $y + $h / 2);
                 return;
 
+            case 'rect':
+                $this->drawRect($pdf, $field, $x, $y, $w, $h);
+                return;
+
             case 'checkbox':
                 $checked = ! empty($field['checked'])
-                    || (! empty($field['key']) && $resolver->resolve($field['key']));
+                    || (! empty($field['bind']) && $resolver->resolve($field['bind']));
                 $pdf->SetLineWidth(0.75);
                 $pdf->SetDrawColor(80, 80, 80);
                 $pdf->Rect($x, $y, $w, $h);
@@ -155,15 +163,87 @@ class FpdiEngine implements TemplateAwarePdfEngine
                 }
                 return;
 
+            case 'heading':
+                $this->drawText($pdf, $field, (string) ($field['text'] ?? ''), $x, $y, $w, $h, true);
+                return;
+
+            case 'text':
+                // Builder: static text. Legacy: resolve bind/key.
+                if (array_key_exists('text', $field)) {
+                    $this->drawText($pdf, $field, (string) ($field['text'] ?? ''), $x, $y, $w, $h, true);
+                } else {
+                    $token = $field['bind'] ?? $field['key'] ?? null;
+                    $raw   = $token ? $resolver->resolve($token) : ($field['sample'] ?? $field['label'] ?? '');
+                    $this->drawText($pdf, $field, (string) ($raw ?? ''), $x, $y, $w, $h, false);
+                }
+                return;
+
+            case 'bound':
+                $bind = $field['bind'] ?? $field['key'] ?? '';
+                if ($bind === '') return;
+                $raw   = $resolver->resolve($bind);
+                $def   = $catalog[$bind] ?? [];
+                $type  = $def['type'] ?? 'text';
+                $value = $this->formatBound($type, $raw, $def);
+                $this->drawText($pdf, $field, $value, $x, $y, $w, $h, $type === 'longtext');
+                return;
+
             case 'currency':
             case 'date':
             case 'number':
-            case 'text':
             case 'longtext':
-            default:
-                $value = $this->formatValue($type, $field, $resolver);
-                $this->drawText($pdf, $field, $value, $x, $y, $w, $h, $type === 'longtext');
+                $token = $field['bind'] ?? $field['key'] ?? null;
+                $raw   = $token ? $resolver->resolve($token) : ($field['sample'] ?? '');
+                $value = $this->formatBound($kind, $raw, $field);
+                $this->drawText($pdf, $field, $value, $x, $y, $w, $h, $kind === 'longtext');
                 return;
+
+            case 'qr':
+                $value = $this->substituteTokens((string) ($field['value'] ?? ''), $resolver);
+                $this->drawText($pdf, $field, $value, $x, $y, $w, $h, false);
+                return;
+
+            case 'page-number':
+                $format = (string) ($field['format'] ?? 'Page {{page}} of {{total}}');
+                $value  = strtr($format, [
+                    '{{page}}'  => (string) ($page + 1),
+                    '{{total}}' => (string) $totalPages,
+                ]);
+                $this->drawText($pdf, $field, $value, $x, $y, $w, $h, false);
+                return;
+
+            default:
+                // Legacy / unknown kind — try $bind then $key.
+                $raw = ! empty($field['bind']) ? $resolver->resolve($field['bind'])
+                     : (! empty($field['key']) ? $resolver->resolve($field['key'])
+                     : ($field['sample'] ?? $field['label'] ?? ''));
+                $this->drawText($pdf, $field, (string) ($raw ?? ''), $x, $y, $w, $h, false);
+                return;
+        }
+    }
+
+    protected function drawRect(Fpdi $pdf, array $field, float $x, float $y, float $w, float $h): void
+    {
+        $fill   = ! empty($field['fill']) ? $this->hexToRgb($field['fill']) : null;
+        $stroke = ! empty($field['stroke']) ? $this->hexToRgb($field['stroke']) : null;
+        $radius = (float) ($field['borderRadius'] ?? 0);
+
+        $style = '';
+        if ($fill && $stroke)      $style = 'DF';
+        elseif ($fill)             $style = 'F';
+        elseif ($stroke)           $style = 'D';
+        else                       return;
+
+        if ($fill)   $pdf->SetFillColor($fill[0], $fill[1], $fill[2]);
+        if ($stroke) {
+            $pdf->SetDrawColor($stroke[0], $stroke[1], $stroke[2]);
+            $pdf->SetLineWidth((float) ($field['strokeWidth'] ?? 1));
+        }
+
+        if ($radius > 0 && method_exists($pdf, 'RoundedRect')) {
+            $pdf->RoundedRect($x, $y, $w, $h, $radius, '1111', $style);
+        } else {
+            $pdf->Rect($x, $y, $w, $h, $style);
         }
     }
 
@@ -172,8 +252,9 @@ class FpdiEngine implements TemplateAwarePdfEngine
         $color = $this->hexToRgb($field['color'] ?? '#111827');
         $size  = (float) ($field['fontSize'] ?? 11);
         $style = '';
-        if (! empty($field['bold']))   $style .= 'B';
-        if (! empty($field['italic'])) $style .= 'I';
+        if (! empty($field['bold']))      $style .= 'B';
+        if (! empty($field['italic']))    $style .= 'I';
+        if (! empty($field['underline'])) $style .= 'U';
 
         $pdf->SetTextColor($color[0], $color[1], $color[2]);
         $pdf->SetFont($this->mapFont($field['fontFamily'] ?? null), $style, $size);
@@ -192,22 +273,56 @@ class FpdiEngine implements TemplateAwarePdfEngine
         }
     }
 
-    protected function formatValue(string $type, array $field, FieldResolver $resolver): string
+    protected function formatBound(string $type, mixed $value, array $def): string
     {
-        $raw = $field['key'] ? $resolver->resolve($field['key']) : ($field['sample'] ?? $field['label'] ?? '');
-
-        if ($raw === null || $raw === '') {
+        if ($value === null || $value === '') {
             return '';
         }
 
         return match ($type) {
-            'currency' => $this->formatCurrency($raw, $field['currency'] ?? null),
-            'date'     => $this->formatDate($raw, $field['format'] ?? null),
-            'number'   => is_numeric($raw)
-                ? number_format((float) $raw, (int) ($field['decimals'] ?? 0))
-                : (string) $raw,
-            default    => (string) $raw,
+            'currency' => $this->formatCurrency($value, $def['currency'] ?? null),
+            'date'     => $this->formatDate($value, $def['format'] ?? null),
+            'number'   => is_numeric($value)
+                ? number_format((float) $value, (int) ($def['decimals'] ?? 0))
+                : (string) $value,
+            default    => (string) $value,
         };
+    }
+
+    protected function substituteTokens(string $input, FieldResolver $resolver): string
+    {
+        return (string) preg_replace_callback('/\{\{\s*([\w\.\-]+)\s*\}\}/', function (array $m) use ($resolver) {
+            $resolved = $resolver->resolve($m[1]);
+            return (string) ($resolved ?? '');
+        }, $input);
+    }
+
+    protected function buildFieldCatalog(PdfTemplate $template): array
+    {
+        if (! $template->model_key) {
+            return [];
+        }
+
+        $modelDef = app(PdfTemplateBuilderPlugin::class)->getModels()[$template->model_key] ?? null;
+        if (! $modelDef) {
+            return [];
+        }
+
+        $catalog = [];
+        foreach ($modelDef['fields'] ?? [] as $f) {
+            if (! empty($f['key'])) {
+                $catalog[$f['key']] = $f;
+            }
+        }
+        foreach ($modelDef['relations'] ?? [] as $rel) {
+            foreach ($rel['fields'] ?? [] as $f) {
+                if (! empty($f['key'])) {
+                    $catalog[$f['key']] = $f;
+                }
+            }
+        }
+
+        return $catalog;
     }
 
     protected function formatCurrency(mixed $value, ?string $currency): string
