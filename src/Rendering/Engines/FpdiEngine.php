@@ -82,6 +82,7 @@ class FpdiEngine implements TemplateAwarePdfEngine
         $catalog    = $this->buildFieldCatalog($template);
         $totalPages = max(1, (int) ($template->pages ?? 1));
         $fields     = $template->fields ?? [];
+        $pageOffset = $this->detectPageOffset($fields);
 
         for ($p = 0; $p < $totalPages; $p++) {
             $pdf->AddPage('P', [$pageW, $pageH]);
@@ -92,7 +93,7 @@ class FpdiEngine implements TemplateAwarePdfEngine
             }
 
             foreach ($fields as $field) {
-                if (((int) ($field['page'] ?? 0)) !== $p) {
+                if (((int) ($field['page'] ?? 0)) - $pageOffset !== $p) {
                     continue;
                 }
                 $this->drawField($pdf, $field, $resolver, $catalog, $p, $totalPages);
@@ -295,6 +296,26 @@ class FpdiEngine implements TemplateAwarePdfEngine
             $resolved = $resolver->resolve($m[1]);
             return (string) ($resolved ?? '');
         }, $input);
+    }
+
+    /**
+     * The React builder stores `page` as 1-indexed (the UI's `currentPage`,
+     * which starts at 1), while legacy fixtures use 0-indexed pages. Detect
+     * which convention the saved fields use.
+     */
+    protected function detectPageOffset(array $fields): int
+    {
+        $maxPage = 0;
+        foreach ($fields as $f) {
+            $fp = (int) ($f['page'] ?? 0);
+            if ($fp === 0) {
+                return 0;
+            }
+            if ($fp > $maxPage) {
+                $maxPage = $fp;
+            }
+        }
+        return $maxPage >= 1 ? 1 : 0;
     }
 
     protected function buildFieldCatalog(PdfTemplate $template): array
