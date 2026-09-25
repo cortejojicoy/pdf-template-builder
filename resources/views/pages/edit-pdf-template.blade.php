@@ -1,5 +1,5 @@
 <x-filament-panels::page>
-    {{-- ── CSS Variables (light/dark mirror the prototype palette) ─────────────── --}}
+    {{-- ── CSS variables (light/dark mirror the Filament palette) ─────────────── --}}
     <style>
         :root {
             --pdf-bg:             #f7f7f8;
@@ -63,28 +63,22 @@
             --shadow-md:        var(--pdf-shadow-md);
             --shadow-lg:        var(--pdf-shadow-lg);
 
-            /* Full-width and full-height within the Filament content area */
             display: block;
             width: 100%;
-            height: calc(100vh - 4rem);   /* minus Filament topbar ~4rem */
-            min-height: 400px;
+            /* Replaced at runtime with the exact space left under the page header. */
+            height: calc(100vh - 13rem);
+            min-height: 420px;
             overflow: hidden;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             font-size: 14px;
             line-height: 1.5;
             -webkit-font-smoothing: antialiased;
-        
-        /* Responsive adjustments */
-        @media (max-width: 639px) {
-            #pdf-builder-root {
-                height: calc(80vh - 4rem); /* Reduced height on small screens */
-                font-size: 13px;
-            }
         }
+
         #pdf-builder-root * { box-sizing: border-box; }
-        #pdf-builder-root button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+        #pdf-builder-root button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; padding: 0; }
         #pdf-builder-root input, #pdf-builder-root select, #pdf-builder-root textarea { font-family: inherit; font-size: inherit; color: inherit; }
-        #pdf-builder-root ::-webkit-scrollbar       { width: 10px; height: 10px; }
+        #pdf-builder-root ::-webkit-scrollbar        { width: 10px; height: 10px; }
         #pdf-builder-root ::-webkit-scrollbar-track  { background: transparent; }
         #pdf-builder-root ::-webkit-scrollbar-thumb  { background: var(--border-strong); border-radius: 5px; border: 2px solid var(--surface); }
         #pdf-builder-root ::-webkit-scrollbar-thumb:hover { background: var(--muted-2); }
@@ -96,9 +90,12 @@
         }
         #pdf-builder-root .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
 
-        /* Override Filament page padding so the builder fills the container */
-        .fi-page { padding: 0 !important; }
-        .fi-page > .fi-page-header { display: none !important; }
+        /* The canvas manages its own scrolling — never bounce the page behind it. */
+        .fi-main { max-width: 100% !important; }
+
+        @media (max-width: 1024px) {
+            #pdf-builder-root { font-size: 13px; }
+        }
     </style>
 
     {{-- ── Bootstrap config for the React app ────────────────────────────────── --}}
