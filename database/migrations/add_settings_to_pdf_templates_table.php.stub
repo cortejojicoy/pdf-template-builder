@@ -1,0 +1,30 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        if (Schema::hasColumn('pdf_templates', 'settings')) {
+            return;
+        }
+
+        Schema::table('pdf_templates', function (Blueprint $table) {
+            $table->json('settings')->nullable()->after('fields');
+        });
+    }
+
+    public function down(): void
+    {
+        if (! Schema::hasColumn('pdf_templates', 'settings')) {
+            return;
+        }
+
+        Schema::table('pdf_templates', function (Blueprint $table) {
+            $table->dropColumn('settings');
+        });
+    }
+};
