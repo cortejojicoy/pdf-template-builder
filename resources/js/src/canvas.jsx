@@ -13,10 +13,13 @@ import { buildTargets, snapBox, snapToGrid, GRID_PT, intersects, boundsOf } from
 // back to whatever `globalThis.pdfjsWorker` holds — which, on a host page that
 // bundles its own pdf.js, is a different version, and every render then dies
 // with "API version does not match the Worker version".
-const ASSET_BASE = (typeof window !== 'undefined' && window.__PDF_BUILDER__?.assetBase) || '';
+const ASSET_BASE    = (typeof window !== 'undefined' && window.__PDF_BUILDER__?.assetBase) || '';
+// Same cache-buster the page uses for the bundle, so a republished worker can
+// never be served from cache at the previous version.
+const ASSET_VERSION = (typeof window !== 'undefined' && window.__PDF_BUILDER__?.assetVersion) || '';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = ASSET_BASE
-  ? `${ASSET_BASE.replace(/\/$/, '')}/pdf.worker.min.js`
+  ? `${ASSET_BASE.replace(/\/$/, '')}/pdf.worker.min.js${ASSET_VERSION ? `?v=${encodeURIComponent(ASSET_VERSION)}` : ''}`
   : `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 const pdfDocCache = new Map();
