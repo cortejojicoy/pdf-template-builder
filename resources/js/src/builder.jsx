@@ -1,139 +1,350 @@
-// Builder view — sidebar (models/fields/layers/settings) + canvas + properties panel.
-// Production version: reads model config from window.__PDF_BUILDER__.models instead of
-// the prototype's static window.MODELS.
+// Builder shell: owns the document, the selection and every editing operation,
+// then hands a single `editor` object to the canvas and the panels.
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './icons.jsx';
-import { CanvasArea, RightPropsPanel } from './canvas.jsx';
-import { btnGhost } from './styles.js';
+import { CanvasArea } from './canvas.jsx';
+import { RightPropsPanel } from './panel.jsx';
+import { ConfirmDialog, ContextMenu, IconBtn, Kbd, inputStyle, focusRing } from './ui.jsx';
+import { useShortcuts, ShortcutsOverlay } from './shortcuts.jsx';
+import {
+  useDocument, normalizeDoc, toPayload, patchFields, removeFields,
+  cloneFields, pasteFields, reorder as reorderFields,
+  insertPage, duplicatePage as dupPage, deletePage as delPage, movePage as mvPage,
+} from './document.js';
+import {
+  pageDims, PAGE_SIZES, makeField, KIND_ICON, ELEMENT_DEFS, NUDGE, NUDGE_BIG, isTypingTarget,
+} from './constants.js';
+import { buildTargets, snapBox } from './snap.js';
 
-const PX_PER_PT = 1;
-const PAGE_W = 612;  // letter portrait (pts)
-const PAGE_H = 792;
+const ARROW_DELTA = {
+  ArrowLeft:  [-1, 0], ArrowRight: [1, 0],
+  ArrowUp:    [0, -1], ArrowDown:  [0, 1],
+};
 
-function BuilderView({ template, models, onSave, onFieldsChange, saving }) {
+function BuilderView({ template, models, onSave, onPreview, bridge, saving, saveError }) {
   const modelKey = template.model_key || 'invoice';
-  const model    = models[modelKey] || { label: modelKey, fields: [], relations: {} };
+  const rawModel = models[modelKey] || { label: modelKey, fields: [], relations: {} };
+  const model = useMemo(() => ({
+    name: rawModel.label || modelKey,
+    icon: rawModel.icon || 'database',
+    fields: rawModel.fields || [],
+    relations: rawModel.relations || {},
+  }), [rawModel, modelKey]);
 
-  // Normalize model shape to match prototype (icon, relations object).
-  const normalizedModel = {
-    name: model.label || modelKey,
-    icon: model.icon || 'database',
-    fields: model.fields || [],
-    relations: model.relations || {},
-  };
+  const { doc, update, commit, undo, redo, canUndo, canRedo } = useDocument(() => normalizeDoc(template));
 
-  const [fields, setFields]         = useState(() => template.fields || []);
-  const [selection, setSelection]   = useState(null);
+  const [selection, setSelection]   = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(template.pages || 1);
   const [zoom, setZoom]             = useState(0.9);
-  const [sidebarTab, setSidebarTab] = useState('fields');
+  const [view, setView]             = useState({ rulers: false, grid: false, snap: true, margins: false });
   const [drag, setDrag]             = useState(null);
+  const [dropHoverPage, setDropHoverPage] = useState(null);
+  const [sidebarTab, setSidebarTab] = useState('fields');
+  const [menu, setMenu]             = useState(null);
+  const [confirmReq, setConfirmReq] = useState(null);
+  const [helpOpen, setHelpOpen]     = useState(false);
 
-  // Expose save to the top bar's button via a window function.
+  const clipboard   = useRef([]);
+  const viewportApi = useRef({});
+  const pendingPage = useRef(null);
+
+  // Every edit produces a new document object, so identity is enough to know
+  // whether anything has changed since the last successful save.
+  const savedDoc = useRef(null);
+  const [, markSaved] = useState(0);
+  if (savedDoc.current === null) savedDoc.current = doc;
+
+  const { w: pageW, h: pageH } = pageDims(doc.page_size, doc.orientation);
+  const dirty = doc !== savedDoc.current;
+
+  // Keep the selection honest when elements or pages disappear.
   useEffect(() => {
-    window.__builderSave = () => onSave && onSave({ fields, pages: totalPages });
-    return () => { window.__builderSave = null; };
-  }, [fields, totalPages, onSave]);
+    const live = new Set(doc.fields.map((f) => f.id));
+    setSelection((sel) => (sel.every((id) => live.has(id)) ? sel : sel.filter((id) => live.has(id))));
+  }, [doc.fields]);
 
-  // Notify parent of changes so it can show "unsaved" indicator.
-  const fieldsRef = React.useRef(fields);
   useEffect(() => {
-    if (fieldsRef.current !== fields) {
-      fieldsRef.current = fields;
-      onFieldsChange && onFieldsChange();
-    }
-  }, [fields]);
+    if (currentPage > doc.pages) setCurrentPage(doc.pages);
+  }, [doc.pages, currentPage]);
 
-  const selectedField = fields.find((f) => f.id === selection);
+  // Page operations select a page that doesn't exist on screen yet, so the
+  // scroll has to wait for the render that creates it.
+  const goToPageAfterRender = useCallback((p) => {
+    pendingPage.current = p;
+    setCurrentPage(p);
+  }, []);
 
-  const updateField    = (id, patch) => setFields((fs) => fs.map((f) => f.id === id ? { ...f, ...patch } : f));
-  const deleteField    = (id) => { setFields((fs) => fs.filter((f) => f.id !== id)); setSelection(null); };
-  const duplicateField = (id) => {
-    const f = fields.find((x) => x.id === id);
-    if (!f) return;
-    const nid = 'f' + Date.now();
-    setFields((fs) => [...fs, { ...f, id: nid, x: f.x + 12, y: f.y + 12 }]);
-    setSelection(nid);
-  };
-
-  const dropField = (clientX, clientY, canvasRect, pageNum) => {
-    if (!drag) return;
-    const x   = (clientX - canvasRect.left) / zoom;
-    const y   = (clientY - canvasRect.top)  / zoom;
-    const nid = 'f' + Date.now();
-    const base = { id: nid, page: pageNum, x: Math.round(x - 40), y: Math.round(y - 8) };
-    let nf;
-    if (drag.kind === 'bound') {
-      nf = { ...base, kind: 'bound', bind: drag.bind, w: 140, h: 18, fontSize: 11 };
-    } else if (drag.kind === 'heading') {
-      nf = { ...base, kind: 'heading', text: 'Heading', w: 180, h: 28, fontSize: 18, bold: true };
-    } else if (drag.kind === 'text') {
-      nf = { ...base, kind: 'text', text: 'Text', w: 140, h: 18, fontSize: 11 };
-    } else if (drag.kind === 'divider') {
-      nf = { ...base, kind: 'divider', w: 200, h: 1 };
-    } else if (drag.kind === 'rect') {
-      nf = { ...base, kind: 'rect', w: 160, h: 60, fill: '#f3f4f6' };
-    } else if (drag.kind === 'image') {
-      nf = { ...base, kind: 'image', w: 120, h: 80 };
-    } else if (drag.kind === 'signature') {
-      nf = { ...base, kind: 'signature', w: 200, h: 60 };
-    } else if (drag.kind === 'checkbox') {
-      nf = { ...base, kind: 'checkbox', w: 16, h: 16 };
-    } else if (drag.kind === 'qr') {
-      nf = { ...base, kind: 'qr', w: 80, h: 80 };
-    } else if (drag.kind === 'page-number') {
-      nf = { ...base, kind: 'page-number', w: 60, h: 14, fontSize: 9, align: 'center', color: '#9ca3af' };
-    } else {
-      nf = { ...base, kind: 'text', text: 'New', w: 100, h: 18, fontSize: 11 };
-    }
-    setFields((fs) => [...fs, nf]);
-    setSelection(nid);
-    setDrag(null);
-  };
-
-  // Keyboard shortcuts
   useEffect(() => {
-    const onKey = (e) => {
-      if (!selection) return;
-      if ((e.key === 'Delete' || e.key === 'Backspace') && e.target === document.body) {
-        deleteField(selection);
-      }
-      if (e.key === 'd' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        duplicateField(selection);
-      }
+    if (pendingPage.current == null) return;
+    const p = pendingPage.current;
+    pendingPage.current = null;
+    const frame = requestAnimationFrame(() => viewportApi.current.goToPage?.(p));
+    return () => cancelAnimationFrame(frame);
+  }, [doc]);
+
+  const toggleView   = useCallback((k) => setView((v) => ({ ...v, [k]: !v[k] })), []);
+  const closeMenu    = useCallback(() => setMenu(null), []);
+  const closeConfirm = useCallback(() => setConfirmReq(null), []);
+
+  // ── Editing operations ──────────────────────────────────────────────────────
+  const targetIds = useCallback((ids) => (ids && ids.length ? ids : selection), [selection]);
+
+  const ops = useMemo(() => {
+    const patch = (ids, p, opts) => update((d) => patchFields(d, ids, p), opts);
+
+    const remove = (ids) => {
+      const list = targetIds(ids);
+      if (!list.length) return;
+      update((d) => removeFields(d, list));
+      setSelection([]);
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [selection]);
 
-  const handleSave = () => {
-    onSave({ fields, pages: totalPages });
+    const duplicate = (ids, dx = 12, dy = 12) => {
+      const list = targetIds(ids);
+      if (!list.length) return [];
+      let created = [];
+      update((d) => {
+        const [next, newIds] = cloneFields(d, list, dx, dy);
+        created = newIds;
+        return next;
+      });
+      setSelection(created);
+      return created;
+    };
+
+    const copy = (ids) => {
+      const list = targetIds(ids);
+      clipboard.current = doc.fields.filter((f) => list.includes(f.id)).map((f) => ({ ...f }));
+    };
+
+    const cut = (ids) => { copy(ids); remove(ids); };
+
+    const paste = () => {
+      if (!clipboard.current.length) return;
+      let created = [];
+      update((d) => {
+        const [next, newIds] = pasteFields(d, clipboard.current, currentPage);
+        created = newIds;
+        return next;
+      });
+      setSelection(created);
+    };
+
+    const reorder = (mode, ids) => {
+      const list = targetIds(ids);
+      if (!list.length) return;
+      update((d) => reorderFields(d, list, mode));
+    };
+
+    const nudge = (dx, dy) => {
+      if (!selection.length) return;
+      update((d) => patchFields(d, selection, (f) => ({
+        x: Math.max(0, f.x + dx), y: Math.max(0, f.y + dy),
+      })));
+    };
+
+    const selectAllOnPage = () => setSelection(doc.fields.filter((f) => f.page === currentPage).map((f) => f.id));
+
+    const addPage = (after = currentPage) => {
+      update((d) => insertPage(d, after + 1));
+      goToPageAfterRender(after + 1);
+    };
+
+    const duplicatePage = (p) => {
+      update((d) => dupPage(d, p));
+      goToPageAfterRender(p + 1);
+    };
+
+    const deletePage = (p) => {
+      if (doc.pages <= 1) return;
+      const count = doc.fields.filter((f) => f.page === p).length;
+      const run = () => {
+        update((d) => delPage(d, p));
+        setSelection([]);
+        const next = currentPage > p ? currentPage - 1 : currentPage;
+        goToPageAfterRender(Math.max(1, Math.min(next, doc.pages - 1)));
+      };
+      if (count === 0) { run(); return; }
+      setConfirmReq({
+        title: `Delete page ${p}?`,
+        body: `This page has ${count} element${count === 1 ? '' : 's'}. Deleting it removes them and shifts the later pages up. You can undo this with ⌘Z.`,
+        confirmLabel: 'Delete page',
+        danger: true,
+        onConfirm: run,
+      });
+    };
+
+    const movePage = (from, to) => {
+      if (to < 1 || to > doc.pages) return;
+      update((d) => mvPage(d, from, to));
+      goToPageAfterRender(to);
+    };
+
+    const setSetting = (patchObj) => update((d) => ({ ...d, ...patchObj }));
+    const setMargin = (side, value) => update((d) => ({ ...d, margins: { ...d.margins, [side]: value } }));
+
+    return {
+      patch, remove, duplicate, copy, cut, paste, reorder, nudge, selectAllOnPage,
+      addPage, duplicatePage, deletePage, movePage, setSetting, setMargin,
+    };
+  }, [doc, update, currentPage, selection, targetIds, goToPageAfterRender]);
+
+  // ── Drag & drop from the sidebar ────────────────────────────────────────────
+  const dropField = useCallback((clientX, clientY, pageRect, pageNum) => {
+    if (!drag) return;
+    const def = ELEMENT_DEFS[drag.kind] || ELEMENT_DEFS.text;
+    let x = (clientX - pageRect.left) / zoom - def.w / 2;
+    let y = (clientY - pageRect.top)  / zoom - def.h / 2;
+
+    if (view.snap) {
+      const others = doc.fields.filter((f) => f.page === pageNum);
+      const snapped = snapBox(x, y, def.w, def.h, buildTargets(others, pageW, pageH, doc.margins), zoom);
+      x = snapped.x; y = snapped.y;
+    }
+
+    const field = makeField(drag.kind, {
+      x: Math.max(0, x), y: Math.max(0, y), page: pageNum, bind: drag.bind, label: drag.label,
+    });
+    update((d) => ({ ...d, fields: [...d.fields, field] }));
+    setSelection([field.id]);
+    setCurrentPage(pageNum);
+    setDrag(null);
+  }, [drag, zoom, view.snap, doc.fields, doc.margins, pageW, pageH, update]);
+
+  // ── Save / preview ──────────────────────────────────────────────────────────
+  const save = useCallback(async () => {
+    const snapshot = doc;
+    const ok = await onSave(toPayload(snapshot));
+    if (ok) {
+      savedDoc.current = snapshot;
+      markSaved((n) => n + 1);
+    }
+    return ok;
+  }, [doc, onSave]);
+
+  const preview = useCallback(async () => {
+    if (dirty) await save();
+    onPreview();
+  }, [dirty, save, onPreview]);
+
+  // Expose to the Filament header buttons.
+  useEffect(() => {
+    bridge.current = { save, preview, showShortcuts: () => setHelpOpen(true), isDirty: () => dirty };
+  }, [bridge, save, preview, dirty]);
+
+  // ── Context menus ───────────────────────────────────────────────────────────
+  const openElementMenu = useCallback((x, y) => {
+    setMenu({
+      x, y,
+      items: [
+        { label: 'Duplicate',      icon: 'copy',        kbd: '⌘D', onClick: () => ops.duplicate() },
+        { label: 'Copy',           icon: 'clipboard',   kbd: '⌘C', onClick: () => ops.copy() },
+        { label: 'Cut',            icon: 'scissors',    kbd: '⌘X', onClick: () => ops.cut() },
+        { label: 'Paste',          icon: 'clipboard',   kbd: '⌘V', onClick: () => ops.paste(), disabled: !clipboard.current.length },
+        { separator: true },
+        { label: 'Bring to front', icon: 'bring-front', onClick: () => ops.reorder('front') },
+        { label: 'Bring forward',  icon: 'arrow-up',    onClick: () => ops.reorder('forward') },
+        { label: 'Send backward',  icon: 'arrow-down',  onClick: () => ops.reorder('backward') },
+        { label: 'Send to back',   icon: 'send-back',   onClick: () => ops.reorder('back') },
+        { separator: true },
+        { label: 'Delete',         icon: 'trash',       kbd: '⌫', danger: true, onClick: () => ops.remove() },
+      ],
+    });
+  }, [ops]);
+
+  const openPageMenu = useCallback((x, y, page) => {
+    setMenu({
+      x, y,
+      items: [
+        { label: 'Paste here',        icon: 'clipboard', kbd: '⌘V', onClick: () => ops.paste(), disabled: !clipboard.current.length },
+        { label: 'Select all on page', icon: 'layers',   kbd: '⌘A', onClick: () => ops.selectAllOnPage() },
+        { separator: true },
+        { label: 'Add page after',    icon: 'file-plus', onClick: () => ops.addPage(page) },
+        { label: 'Duplicate page',    icon: 'copy',      onClick: () => ops.duplicatePage(page) },
+        { label: 'Move page up',      icon: 'arrow-up',  disabled: page === 1,         onClick: () => ops.movePage(page, page - 1) },
+        { label: 'Move page down',    icon: 'arrow-down', disabled: page === doc.pages, onClick: () => ops.movePage(page, page + 1) },
+        { separator: true },
+        { label: 'Delete page',       icon: 'trash', danger: true, disabled: doc.pages <= 1, onClick: () => ops.deletePage(page) },
+      ],
+    });
+  }, [ops, doc.pages]);
+
+  // ── Keyboard ────────────────────────────────────────────────────────────────
+  const vp = () => viewportApi.current || {};
+
+  useShortcuts({
+    save, preview,
+    undo, redo,
+    help: () => setHelpOpen((o) => !o),
+    copy: () => ops.copy(),
+    cut: () => ops.cut(),
+    paste: () => ops.paste(),
+    duplicate: () => ops.duplicate(),
+    remove: () => ops.remove(),
+    selectAll: () => ops.selectAllOnPage(),
+    deselect: (e) => {
+      if (isTypingTarget(e.target)) { e.target.blur(); return; }
+      if (helpOpen) { setHelpOpen(false); return; }
+      setSelection([]);
+      setDrag(null);
+    },
+    nudge: (e) => { const d = ARROW_DELTA[e.key]; if (d) ops.nudge(d[0] * NUDGE, d[1] * NUDGE); },
+    nudgeBig: (e) => { const d = ARROW_DELTA[e.key]; if (d) ops.nudge(d[0] * NUDGE_BIG, d[1] * NUDGE_BIG); },
+    forward:  () => ops.reorder('forward'),
+    backward: () => ops.reorder('backward'),
+    front:    () => ops.reorder('front'),
+    back:     () => ops.reorder('back'),
+    zoomIn:    () => vp().zoomIn?.(),
+    zoomOut:   () => vp().zoomOut?.(),
+    zoomFit:   () => vp().fitPage?.(),
+    zoom100:   () => vp().zoom100?.(),
+    zoomWidth: () => vp().fitWidth?.(),
+    toggleRulers: () => toggleView('rulers'),
+    toggleGrid:   () => toggleView('grid'),
+    toggleSnap:   () => toggleView('snap'),
+    prevPage: () => vp().goToPage?.(Math.max(1, currentPage - 1)),
+    nextPage: () => vp().goToPage?.(Math.min(doc.pages, currentPage + 1)),
+    addPage:  () => ops.addPage(),
+    deletePage: () => ops.deletePage(currentPage),
+  });
+
+  const editor = {
+    doc, update, commit, undo, redo, canUndo, canRedo,
+    selection, setSelection,
+    currentPage, setCurrentPage,
+    zoom, setZoom, pageW, pageH,
+    view, toggleView,
+    ops,
+    drag, setDrag, dropField, dropHoverPage, setDropHoverPage,
+    openElementMenu, openPageMenu,
+    showShortcuts: () => setHelpOpen(true),
+    backgroundUrl: template.background_url,
+    goToPage: (p) => (viewportApi.current.goToPage ? viewportApi.current.goToPage(p) : setCurrentPage(p)),
   };
+
+  const status = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--muted)', flexShrink: 0, paddingRight: 2 }}>
+      <span style={{
+        display: 'inline-block', width: 6, height: 6, borderRadius: 3, flexShrink: 0,
+        background: saveError ? 'var(--danger)' : saving ? 'var(--warning)' : dirty ? 'var(--warning)' : 'var(--success)',
+      }} />
+      <span>{saving ? 'Saving…' : saveError ? 'Save failed' : dirty ? 'Unsaved changes' : 'All changes saved'}</span>
+    </div>
+  );
 
   return (
     <div style={{ height: '100%', display: 'flex', minHeight: 0, position: 'relative' }}>
-      <Sidebar model={normalizedModel} activeTab={sidebarTab} onTab={setSidebarTab}
-        fields={fields.filter((f) => f.page === currentPage)} selection={selection} onSelect={setSelection}
-        onStartDrag={setDrag} template={template} />
+      <Sidebar editor={editor} model={model} activeTab={sidebarTab} onTab={setSidebarTab} onStartDrag={setDrag} />
 
-      <CanvasArea model={normalizedModel}
-        fields={fields} setFields={setFields}
-        selection={selection} setSelection={setSelection}
-        currentPage={currentPage} setCurrentPage={setCurrentPage}
-        totalPages={totalPages} setTotalPages={setTotalPages}
-        zoom={zoom} setZoom={setZoom}
-        drag={drag} setDrag={setDrag}
-        onDropField={dropField}
-        updateField={updateField} deleteField={deleteField} duplicateField={duplicateField}
-        template={template} />
+      <CanvasArea editor={editor} viewportApi={viewportApi} status={status} />
 
-      <RightPropsPanel field={selectedField} model={normalizedModel}
-        onUpdate={updateField} onDelete={deleteField} onDuplicate={duplicateField} />
+      <RightPropsPanel editor={editor} />
 
       {drag && <DragGhost drag={drag} />}
+      <ContextMenu menu={menu} onClose={closeMenu} />
+      <ConfirmDialog request={confirmReq} onClose={closeConfirm} />
+      <ShortcutsOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }
@@ -149,7 +360,7 @@ function DragGhost({ drag }) {
 }
 
 // ───────── Sidebar ─────────
-function Sidebar({ model, activeTab, onTab, fields, selection, onSelect, onStartDrag, template }) {
+function Sidebar({ editor, model, activeTab, onTab, onStartDrag }) {
   const tabs = [
     { id: 'fields',   icon: 'database', label: 'Fields'   },
     { id: 'elements', icon: 'type',     label: 'Elements' },
@@ -164,7 +375,7 @@ function Sidebar({ model, activeTab, onTab, fields, selection, onSelect, onStart
         {tabs.map((t) => {
           const active = activeTab === t.id;
           return (
-            <button key={t.id} onClick={() => onTab(t.id)}
+            <button type="button" key={t.id} onClick={() => onTab(t.id)}
               style={{
                 flex: 1, padding: '10px 4px 12px', fontSize: 11.5, fontWeight: 500,
                 color: active ? 'var(--accent)' : 'var(--muted)',
@@ -183,23 +394,12 @@ function Sidebar({ model, activeTab, onTab, fields, selection, onSelect, onStart
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {activeTab === 'fields'   && <FieldsTab model={model} onStartDrag={onStartDrag} />}
         {activeTab === 'elements' && <ElementsTab onStartDrag={onStartDrag} />}
-        {activeTab === 'layers'   && <LayersTab fields={fields} selection={selection} onSelect={onSelect} />}
-        {activeTab === 'settings' && <SettingsTab model={model} template={template} />}
+        {activeTab === 'layers'   && <LayersTab editor={editor} />}
+        {activeTab === 'settings' && <SettingsTab editor={editor} model={model} />}
       </div>
     </aside>
   );
 }
-
-// Shared Filament-style input focus ring.
-const fieldFocus = {
-  onFocus: (e) => { e.target.style.borderColor = 'var(--accent)'; e.target.style.boxShadow = '0 0 0 3px var(--accent-soft)'; },
-  onBlur:  (e) => { e.target.style.borderColor = 'var(--border)'; e.target.style.boxShadow = 'none'; },
-};
-const filInput = {
-  width: '100%', height: 36, padding: '0 12px', fontSize: 13,
-  border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface)',
-  outline: 'none', transition: 'border-color .15s ease, box-shadow .15s ease',
-};
 
 // ───── Fields tab ─────
 function FieldsTab({ model, onStartDrag }) {
@@ -216,8 +416,7 @@ function FieldsTab({ model, onStartDrag }) {
       <div style={{ position: 'relative', marginBottom: 10 }}>
         <Icon name="search" size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-2)' }} />
         <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search fields"
-          {...fieldFocus}
-          style={{ ...filInput, paddingLeft: 34 }} />
+          {...focusRing} style={{ ...inputStyle, paddingLeft: 34 }} />
       </div>
       <FieldGroup title={model.name} fields={primary} onStartDrag={onStartDrag} />
       {relations.map((r) => (
@@ -236,7 +435,7 @@ function FieldGroup({ title, subtitle, fields, onStartDrag }) {
   const [open, setOpen] = useState(true);
   return (
     <div style={{ marginBottom: 6 }}>
-      <button onClick={() => setOpen((o) => !o)}
+      <button type="button" onClick={() => setOpen((o) => !o)}
         style={{
           width: '100%', display: 'flex', alignItems: 'center', gap: 8,
           padding: '8px 10px', fontSize: 12.5, fontWeight: 600, color: 'var(--text)',
@@ -297,60 +496,71 @@ function FieldChip({ field, onStartDrag }) {
 }
 
 // ───── Elements tab ─────
-const STATIC_ELEMENTS = [
-  { kind: 'text',        label: 'Text',      icon: 'type'        },
-  { kind: 'heading',     label: 'Heading',   icon: 'heading'     },
-  { kind: 'divider',     label: 'Divider',   icon: 'minus'       },
-  { kind: 'rect',        label: 'Rectangle', icon: 'square'      },
-  { kind: 'image',       label: 'Image',     icon: 'image'       },
-  { kind: 'signature',   label: 'Signature', icon: 'pen'         },
-  { kind: 'checkbox',    label: 'Checkbox',  icon: 'check-square'},
-  { kind: 'qr',          label: 'QR code',   icon: 'qr'          },
-  { kind: 'page-number', label: 'Page #',    icon: 'hash'        },
-];
+const STATIC_ELEMENTS = ['text', 'heading', 'divider', 'rect', 'image', 'signature', 'checkbox', 'qr', 'page-number'];
 
 function ElementsTab({ onStartDrag }) {
   return (
-    <div style={{ padding: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-      {STATIC_ELEMENTS.map((el) => (
-        <button key={el.kind}
-          onPointerDown={(e) => onStartDrag({ kind: el.kind, label: el.label, clientX: e.clientX, clientY: e.clientY })}
-          style={{
-            padding: '16px 8px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)',
-            color: 'var(--text-2)',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'grab',
-            transition: 'all .12s ease',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-soft)'; e.currentTarget.style.color = 'var(--accent)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--surface)'; e.currentTarget.style.color = 'var(--text-2)'; }}>
-          <Icon name={el.icon} size={18} />
-          <div style={{ fontSize: 12, fontWeight: 500 }}>{el.label}</div>
-        </button>
-      ))}
+    <div style={{ padding: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        {STATIC_ELEMENTS.map((kind) => {
+          const el = ELEMENT_DEFS[kind];
+          return (
+            <button type="button" key={kind}
+              onPointerDown={(e) => onStartDrag({ kind, label: el.label, clientX: e.clientX, clientY: e.clientY })}
+              style={{
+                padding: '16px 8px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)',
+                color: 'var(--text-2)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'grab',
+                transition: 'all .12s ease',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-soft)'; e.currentTarget.style.color = 'var(--accent)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--surface)'; e.currentTarget.style.color = 'var(--text-2)'; }}>
+              <Icon name={el.icon} size={18} />
+              <div style={{ fontSize: 12, fontWeight: 500 }}>{el.label}</div>
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 14, fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.6 }}>
+        Drag an element onto a page. Hold <Kbd>Alt</Kbd> while dragging on the canvas to clone,
+        or to ignore snapping.
+      </div>
     </div>
   );
 }
 
 // ───── Layers tab ─────
-function LayersTab({ fields, selection, onSelect }) {
+function LayersTab({ editor }) {
+  const fields = editor.doc.fields.filter((f) => f.page === editor.currentPage);
   const labelFor = (f) => f.kind === 'bound' ? f.bind
     : f.kind === 'text' || f.kind === 'heading' ? (f.text || 'Text')
     : f.kind.charAt(0).toUpperCase() + f.kind.slice(1);
-  const icon = (k) => ({ bound: 'database', text: 'type', heading: 'heading', divider: 'minus',
-    rect: 'square', image: 'image', signature: 'pen', checkbox: 'check-square', qr: 'qr', 'page-number': 'hash' }[k] || 'square');
 
   return (
     <div style={{ padding: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 6px 8px' }}>
+        <div style={{ flex: 1, fontSize: 11, color: 'var(--muted)' }}>Page {editor.currentPage} · top first</div>
+        <IconBtn name="bring-front" size={13} title="Bring to front" onClick={() => editor.ops.reorder('front')} />
+        <IconBtn name="send-back"   size={13} title="Send to back"   onClick={() => editor.ops.reorder('back')} />
+      </div>
+
       {fields.length === 0 && (
         <div style={{ padding: '32px 12px', textAlign: 'center', fontSize: 13, color: 'var(--muted)' }}>
           No elements yet
           <div style={{ fontSize: 11.5, marginTop: 4, color: 'var(--muted-2)' }}>Drag fields or elements onto the canvas.</div>
         </div>
       )}
+
       {fields.slice().reverse().map((f) => {
-        const sel = selection === f.id;
+        const sel = editor.selection.includes(f.id);
         return (
-          <button key={f.id} onClick={() => onSelect(f.id)}
+          <button type="button" key={f.id}
+            onClick={(e) => editor.setSelection(
+              e.shiftKey || e.metaKey || e.ctrlKey
+                ? (sel ? editor.selection.filter((id) => id !== f.id) : [...editor.selection, f.id])
+                : [f.id]
+            )}
+            onContextMenu={(e) => { e.preventDefault(); if (!sel) editor.setSelection([f.id]); editor.openElementMenu(e.clientX, e.clientY); }}
             style={{
               width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
               borderRadius: 6, textAlign: 'left', marginBottom: 1,
@@ -360,10 +570,12 @@ function LayersTab({ fields, selection, onSelect }) {
             }}
             onMouseEnter={(e) => { if (!sel) e.currentTarget.style.background = 'var(--surface-2)'; }}
             onMouseLeave={(e) => { if (!sel) e.currentTarget.style.background = 'transparent'; }}>
-            <Icon name={icon(f.kind)} size={13} style={{ color: sel ? 'var(--accent)' : 'var(--muted)', flexShrink: 0 }} />
+            <Icon name={KIND_ICON[f.kind] || 'square'} size={13} style={{ color: sel ? 'var(--accent)' : 'var(--muted)', flexShrink: 0 }} />
             <span style={{ flex: 1, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
               className={f.kind === 'bound' ? 'mono' : ''}>{labelFor(f)}</span>
-            <span className="mono" style={{ fontSize: 10.5, color: sel ? 'var(--accent)' : 'var(--muted-2)' }}>{Math.round(f.w)}×{Math.round(f.h)}</span>
+            <span className="mono" style={{ fontSize: 10.5, color: sel ? 'var(--accent)' : 'var(--muted-2)' }}>
+              {Math.round(f.w)}×{Math.round(f.h)}
+            </span>
           </button>
         );
       })}
@@ -372,7 +584,8 @@ function LayersTab({ fields, selection, onSelect }) {
 }
 
 // ───── Settings tab ─────
-function SettingsTab({ model, template }) {
+function SettingsTab({ editor, model }) {
+  const { doc, ops } = editor;
   const Row = ({ label, hint, children }) => (
     <div style={{ marginBottom: 16 }}>
       <label style={{ display: 'block', fontSize: 12.5, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>{label}</label>
@@ -380,58 +593,70 @@ function SettingsTab({ model, template }) {
       {hint && <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 6 }}>{hint}</div>}
     </div>
   );
+
   return (
     <div style={{ padding: 14 }}>
       <Row label="Template name">
-        <input style={filInput} defaultValue={template.name} {...fieldFocus} />
+        <input style={inputStyle} value={doc.name} {...focusRing}
+          onChange={(e) => ops.setSetting({ name: e.target.value })} />
       </Row>
+
       <Row label="Bound model">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, padding: '0 12px',
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 34, padding: '0 10px',
           border: '1px solid var(--border)', background: 'var(--surface-2)', borderRadius: 8 }}>
           <Icon name={model.icon} size={14} style={{ color: 'var(--accent)' }} />
           <span style={{ fontSize: 13, fontWeight: 500 }}>{model.name}</span>
         </div>
       </Row>
+
       <Row label="Page size">
-        <select style={filInput} defaultValue={template.page_size || 'Letter'} {...fieldFocus}>
-          <option value="Letter">Letter (8.5 × 11 in)</option>
-          <option value="A4">A4</option>
-          <option value="Legal">Legal</option>
+        <select style={inputStyle} value={doc.page_size} {...focusRing}
+          onChange={(e) => ops.setSetting({ page_size: e.target.value })}>
+          {Object.entries(PAGE_SIZES).map(([key, s]) => <option key={key} value={key}>{s.label}</option>)}
         </select>
       </Row>
-      <Row label="Margins (pt)">
+
+      <Row label="Orientation">
+        <div style={{ display: 'flex', gap: 6 }}>
+          {['portrait', 'landscape'].map((o) => (
+            <button type="button" key={o} onClick={() => ops.setSetting({ orientation: o })}
+              style={{
+                flex: 1, height: 34, borderRadius: 8, fontSize: 12.5, textTransform: 'capitalize',
+                border: '1px solid ' + (doc.orientation === o ? 'transparent' : 'var(--border)'),
+                background: doc.orientation === o ? 'var(--accent-soft)' : 'var(--surface)',
+                color: doc.orientation === o ? 'var(--accent)' : 'var(--text-2)',
+              }}>{o}</button>
+          ))}
+        </div>
+      </Row>
+
+      <Row label="Margins (pt)" hint="Shown as guides on the canvas and used for snapping.">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-          {['T','R','B','L'].map((l) => (
-            <div key={l} style={{ position: 'relative' }}>
-              <input style={{ ...filInput, paddingLeft: 26 }} defaultValue="48" {...fieldFocus} />
-              <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
-                fontSize: 10, color: 'var(--muted-2)', fontWeight: 700, pointerEvents: 'none' }}>{l}</span>
+          {[['T', 'top'], ['R', 'right'], ['B', 'bottom'], ['L', 'left']].map(([abbr, side]) => (
+            <div key={side} style={{ position: 'relative' }}>
+              <input type="number" min={0} style={{ ...inputStyle, paddingLeft: 24, fontSize: 12 }} {...focusRing}
+                value={doc.margins[side]}
+                onChange={(e) => ops.setMargin(side, Math.max(0, +e.target.value || 0))} />
+              <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)',
+                fontSize: 10, color: 'var(--muted-2)', fontWeight: 700, pointerEvents: 'none' }}>{abbr}</span>
             </div>
           ))}
         </div>
       </Row>
+
       <Row label="Filename pattern" hint="Use {{token}} placeholders for dynamic values.">
-        <input className="mono" style={{ ...filInput, fontSize: 12 }}
-          defaultValue={template.filename_pattern || '{{id}}.pdf'} {...fieldFocus} />
+        <input className="mono" style={{ ...inputStyle, fontSize: 12 }} {...focusRing}
+          value={doc.filename_pattern}
+          onChange={(e) => ops.setSetting({ filename_pattern: e.target.value })} />
       </Row>
+
+      <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid var(--border)',
+        fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.7 }}>
+        <div>Pages: <span className="mono" style={{ color: 'var(--text-2)' }}>{doc.pages}</span></div>
+        <div>Elements: <span className="mono" style={{ color: 'var(--text-2)' }}>{doc.fields.length}</span></div>
+      </div>
     </div>
   );
 }
 
-function IconBtn({ name, title, onClick, active }) {
-  return (
-    <button onClick={onClick} title={title}
-      style={{
-        width: 32, height: 32, display: 'grid', placeItems: 'center', borderRadius: 6,
-        color: active ? 'var(--accent)' : 'var(--muted)',
-        background: active ? 'var(--accent-soft)' : 'transparent',
-      }}
-      onMouseEnter={(e) => { if (!active) { e.currentTarget.style.background = 'var(--surface-2)'; e.currentTarget.style.color = 'var(--text)'; } }}
-      onMouseLeave={(e) => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--muted)'; } }}>
-      <Icon name={name} size={16} />
-    </button>
-  );
-}
-
-export { BuilderView, btnGhost, IconBtn };
-export const __builderHelpers = { PX_PER_PT, PAGE_W, PAGE_H };
+export { BuilderView };

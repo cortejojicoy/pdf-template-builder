@@ -31,6 +31,23 @@ const ICONS = {
     'align-left':    'M3 6h18M3 12h10M3 18h14',
     'align-center':  'M3 6h18M6 12h12M4 18h16',
     'align-right':   'M3 6h18M10 12h11M6 18h15',
+    'close':         'M18 6L6 18M6 6l12 12',
+    'undo':          'M9 14L4 9l5-5M4 9h11a5 5 0 010 10h-4',
+    'redo':          'M15 14l5-5-5-5M20 9H9a5 5 0 000 10h4',
+    'grid':          'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
+    'ruler':         'M3 9h18v6H3zM7 9v3M11 9v3M15 9v3M19 9v3',
+    'magnet':        'M6 3v8a6 6 0 0012 0V3h-4v8a2 2 0 01-4 0V3zM6 7h4M14 7h4',
+    'keyboard':      'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M17 10h.01M7 14h10',
+    'maximize':      'M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5',
+    'arrow-up':      'M12 19V5M5 12l7-7 7 7',
+    'arrow-down':    'M12 5v14M19 12l-7 7-7-7',
+    'bring-front':   'M9 3h12v12H9zM15 21H3V9h6M9 15h6V9',
+    'send-back':     'M3 9h12v12H3zM9 3h12v12h-6M15 9H9v6',
+    'clipboard':     'M9 4H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V6a2 2 0 00-2-2h-2M9 4a2 2 0 012-2h2a2 2 0 012 2M9 4a2 2 0 002 2h2a2 2 0 002-2',
+    'scissors':      'M6 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM20 4L8.12 15.88M14.47 14.48L20 20M8.12 8.12L12 12',
+    'hand':          'M18 11V6a2 2 0 00-4 0v5M14 10V4a2 2 0 00-4 0v7M10 10.5V6a2 2 0 00-4 0v8M18 8a2 2 0 114 0v6a8 8 0 01-8 8h-2a8 8 0 01-8-8v-1a2 2 0 114 0',
+    'file-plus':     'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M12 12v6M9 15h6',
+    'upload':        'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12',
   };
 
   function Icon({ name, size = 16, style, className }) {
