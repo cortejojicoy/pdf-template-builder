@@ -5,10 +5,19 @@ import { IconBtn, ToolbarButton } from './ui.jsx';
 import { clamp, MIN_ZOOM, MAX_ZOOM } from './constants.js';
 import { buildTargets, snapBox, snapToGrid, GRID_PT, intersects, boundsOf } from './snap.js';
 
-// pdf.js needs a Web Worker. We're built as an IIFE bundle (no import.meta.url
-// at runtime), so we point at a CDN copy pinned to the installed version.
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+// pdf.js needs a Web Worker, and it must be the same version as this bundle's
+// API. We're an IIFE bundle (no import.meta.url at runtime), so the worker is
+// published beside us and addressed through assetBase.
+//
+// Same-origin matters beyond CSP: when the real worker can't load, pdf.js falls
+// back to whatever `globalThis.pdfjsWorker` holds — which, on a host page that
+// bundles its own pdf.js, is a different version, and every render then dies
+// with "API version does not match the Worker version".
+const ASSET_BASE = (typeof window !== 'undefined' && window.__PDF_BUILDER__?.assetBase) || '';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = ASSET_BASE
+  ? `${ASSET_BASE.replace(/\/$/, '')}/pdf.worker.min.js`
+  : `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 const pdfDocCache = new Map();
 function loadPdfDocument(url) {

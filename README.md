@@ -33,6 +33,18 @@ php artisan vendor:publish --tag=pdf-template-builder-assets
 
 > Re-run this command after each package update to get the latest bundle.
 
+This publishes two files: `pdf-builder.js` and `pdf.worker.min.js`, pdf.js's
+worker. Both must be served from your `public/` — the canvas loads the worker
+same-origin so it always matches the bundled pdf.js API. If your host page also
+bundles pdf.js (a file previewer, say), a mismatched worker on `globalThis` would
+otherwise be picked up and every background render would fail with *"API version
+… does not match the Worker version …"*.
+
+The worker is published as `.js` although its contents are an ES module. pdf.js
+spawns it with `{ type: 'module' }`, so the browser decides by `Content-Type`,
+and stock nginx has no `mime.types` entry for `.mjs` — it would serve
+`application/octet-stream`, which a module worker refuses.
+
 **For maintainers / contributors** — to rebuild the bundle from JSX source:
 
 ```bash
