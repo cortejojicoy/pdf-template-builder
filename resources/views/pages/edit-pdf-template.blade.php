@@ -111,6 +111,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Caveat:wght@500&display=swap" rel="stylesheet" />
 
     {{-- ── Bundled builder app (Vite-built, published to public/vendor/pdf-template-builder/) ── --}}
-    @php $base = $builderConfig['assetBase']; @endphp
-    <script src="{{ $base }}/pdf-builder.js" defer></script>
+    @php $base = $builderConfig['assetBase']; $ver = $builderConfig['assetVersion']; @endphp
+    <script src="{{ $base }}/pdf-builder.js?v={{ $ver }}" defer></script>
 </x-filament-panels::page>
