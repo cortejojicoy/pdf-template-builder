@@ -2,16 +2,19 @@
 
 namespace Kukux\PdfTemplateBuilder\Filament\Resources\PdfTemplateResource\Pages;
 
+use Filament\Actions\Action;
 use Filament\Resources\Pages\Page;
-use Illuminate\Database\Eloquent\Model;
 use Kukux\PdfTemplateBuilder\Filament\Resources\PdfTemplateResource;
 use Kukux\PdfTemplateBuilder\Models\PdfTemplate;
 use Kukux\PdfTemplateBuilder\PdfTemplateBuilderPlugin;
 
 /**
- * Full-screen builder page — renders the React PDF canvas editor.
- * Filament handles auth; all data I/O goes through the JSON API
- * routes registered by the package.
+ * The builder page — Filament renders the chrome (breadcrumbs, heading and the
+ * header buttons); the React canvas fills the rest of the viewport.
+ *
+ * The header buttons are deliberately client-side: the document being edited
+ * lives in the browser, so a Livewire round-trip would have nothing to act on.
+ * Each button dispatches a DOM event that the builder listens for.
  */
 class EditPdfTemplate extends Page
 {
@@ -54,6 +57,7 @@ class EditPdfTemplate extends Page
                     'pages'           => $this->record->pages,
                     'filename_pattern'=> $this->record->filename_pattern,
                     'fields'          => $this->record->fields ?? [],
+                    'settings'        => $this->record->settings ?? [],
                     'background_url'  => $this->record->background_url,
                 ],
                 'models'       => $plugin->getModels(),
@@ -70,8 +74,67 @@ class EditPdfTemplate extends Page
         return $this->record->name;
     }
 
+    public function getSubheading(): string|\Illuminate\Contracts\Support\Htmlable|null
+    {
+        $pages = (int) ($this->record->pages ?: 1);
+        $count = count($this->record->fields ?? []);
+
+        return sprintf(
+            '%d %s · %d %s',
+            $pages,
+            $pages === 1 ? 'page' : 'pages',
+            $count,
+            $count === 1 ? 'element' : 'elements',
+        );
+    }
+
     public function getBreadcrumbs(): array
     {
-        return [];
+        return [
+            static::getResource()::getUrl('index') => static::getResource()::getPluralModelLabel(),
+            $this->record->name,
+        ];
+    }
+
+    /**
+     * @return array<Action>
+     */
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('shortcuts')
+                ->label('Shortcuts')
+                ->icon('heroicon-o-command-line')
+                ->color('gray')
+                ->url('#')
+                ->extraAttributes($this->dispatchesBuilderEvent('shortcuts')),
+
+            Action::make('preview')
+                ->label('Preview')
+                ->icon('heroicon-o-eye')
+                ->color('gray')
+                ->url('#')
+                ->extraAttributes($this->dispatchesBuilderEvent('preview')),
+
+            Action::make('save')
+                ->label('Save template')
+                ->icon('heroicon-o-check')
+                ->url('#')
+                ->extraAttributes($this->dispatchesBuilderEvent('save')),
+        ];
+    }
+
+    /**
+     * Inline handler so the click never leaves the browser — no Livewire
+     * round-trip, and no dependency on Alpine being initialised here.
+     *
+     * @return array<string, string>
+     */
+    protected function dispatchesBuilderEvent(string $name): array
+    {
+        return [
+            'onclick' => "event.preventDefault(); window.dispatchEvent(new CustomEvent('pdf-builder:{$name}'));",
+            'data-pdf-builder-action' => $name,
+        ];
     }
 }
