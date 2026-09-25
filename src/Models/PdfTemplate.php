@@ -23,15 +23,50 @@ class PdfTemplate extends Model
         'pages',
         'filename_pattern',
         'fields',
+        'settings',
         'background_pdf',
         'used_in',
         'disk',
     ];
 
     protected $casts = [
-        'fields' => 'array',
-        'pages'  => 'integer',
+        'fields'   => 'array',
+        'settings' => 'array',
+        'pages'    => 'integer',
     ];
+
+    /**
+     * Whether the `settings` column has been migrated yet. Installs that
+     * upgraded the package but haven't run the new migration keep working —
+     * they just can't persist margins.
+     */
+    public static function supportsSettings(): bool
+    {
+        static $supported = null;
+
+        if ($supported === null) {
+            try {
+                $supported = \Illuminate\Support\Facades\Schema::hasColumn((new static)->getTable(), 'settings');
+            } catch (\Throwable) {
+                $supported = false;
+            }
+        }
+
+        return $supported;
+    }
+
+    /** Page margins (pt) used as canvas guides. */
+    public function getMarginsAttribute(): array
+    {
+        $m = $this->settings['margins'] ?? [];
+
+        return [
+            'top'    => (float) ($m['top']    ?? 48),
+            'right'  => (float) ($m['right']  ?? 48),
+            'bottom' => (float) ($m['bottom'] ?? 48),
+            'left'   => (float) ($m['left']   ?? 48),
+        ];
+    }
 
     /** URL to the background PDF (if uploaded). */
     public function getBackgroundUrlAttribute(): ?string
