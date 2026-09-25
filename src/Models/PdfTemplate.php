@@ -4,6 +4,7 @@ namespace Kukux\PdfTemplateBuilder\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
+use Kukux\PdfTemplateBuilder\PdfTemplateBuilderPlugin;
 use Kukux\PdfTemplateBuilder\Rendering\Contracts\PdfEngine;
 use Kukux\PdfTemplateBuilder\Rendering\Contracts\TemplateAwarePdfEngine;
 use Kukux\PdfTemplateBuilder\Rendering\Engines\FpdiEngine;
@@ -87,6 +88,33 @@ class PdfTemplate extends Model
         }
 
         return $fs->url($this->background_pdf);
+    }
+
+    /**
+     * Backdrop for the builder canvas: the uploaded file when there is one,
+     * otherwise the bound model's advertised `background` — typically a
+     * live-rendered blank form, so a designer never has to upload one.
+     *
+     * `{used_in}` in that URL is replaced with the template's tag, letting one
+     * descriptor serve several variants of the same form (e.g. par | ics).
+     */
+    public function getCanvasBackgroundUrlAttribute(): ?string
+    {
+        if ($url = $this->background_url) {
+            return $url;
+        }
+
+        $descriptor = app(PdfTemplateBuilderPlugin::class)->getModels()[$this->model_key] ?? null;
+
+        if (empty($descriptor['background'])) {
+            return null;
+        }
+
+        return str_replace(
+            '{used_in}',
+            rawurlencode((string) ($this->used_in ?? '')),
+            $descriptor['background'],
+        );
     }
 
     /** Number of fields placed on the canvas. */

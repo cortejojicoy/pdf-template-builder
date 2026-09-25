@@ -114,6 +114,53 @@ Alternatively, configure them in `config/pdf-template-builder.php` after publish
 php artisan vendor:publish --tag=pdf-template-builder-config
 ```
 
+### Descriptor keys
+
+| Key | Required | What it does |
+|---|---|---|
+| `label` | yes | Heading shown above the field palette |
+| `icon` | no | Palette icon name |
+| `class` | no | Eloquent class, used when rendering |
+| `fields` | yes | The draggable bound fields |
+| `relations` | no | Grouped sub-field lists |
+| `background` | no | Canvas backdrop when no background PDF is uploaded |
+
+`background` is a URL the canvas loads behind the fields — typically a route in
+your app that renders the blank form the template stamps onto, so a designer
+never has to upload one by hand. It is used only when the template has no
+uploaded background of its own.
+
+The token `{used_in}` in that URL is replaced with the template's `used_in`
+value, letting one descriptor serve several variants of the same document:
+
+```php
+'background' => url('/forms/blank') . '?type={used_in}',
+```
+
+A template tagged `used_in = "ics"` then loads `/forms/blank?type=ics`. Serve a
+PDF or an image — the canvas renders PDFs with pdf.js.
+
+## Embedding the builder in your own page
+
+The builder reads everything from `window.__PDF_BUILDER__`, so any Filament page
+can host it: render `pdf-template-builder::pages.edit-pdf-template` with your own
+`$builderConfig`. Beyond the keys the template editor passes, four make the
+canvas editable against something other than a template:
+
+| Key | What it does |
+|---|---|
+| `saveUrl` | Where a save PUTs, instead of the template endpoint. Same payload shape |
+| `resetUrl` | DELETEd by the `pdf-builder:reset` event, then the page reloads |
+| `allowedKeys` | Field keys the palette is limited to; relations are hidden |
+| `mode` | `'placement'` hides the Elements and Settings tabs — boxes move, the template is not edited |
+
+Enforce `allowedKeys` at your `saveUrl` too. It narrows the UI, not the request.
+
+Your page renders its own header buttons; they reach the builder through DOM
+events — `pdf-builder:save`, `pdf-builder:reset`, `pdf-builder:shortcuts` and
+`pdf-builder:preview`. Skip Preview unless the record being edited really is a
+`PdfTemplate`, since it resolves the id against the template endpoint.
+
 ## 6. (Optional) Customize sidebar navigation
 
 You can place the "PDF Templates" entry inside a Filament navigation group and control its sort order:

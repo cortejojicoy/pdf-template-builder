@@ -12,6 +12,12 @@ const API    = CFG.apiBase || '';
 const CSRF   = CFG.csrfToken || document.querySelector('meta[name="csrf-token"]')?.content || '';
 const MODELS = CFG.models || {};
 
+// Where a save PUTs, and where a reset DELETEs. Both default to the template's
+// own endpoints; a host page (e.g. a per-document placement editor) points them
+// at its own routes so a save writes an override, not the shared template.
+const SAVE_URL  = CFG.saveUrl  || null;
+const RESET_URL = CFG.resetUrl || null;
+
 async function apiPut(url, body) {
   const res = await fetch(url, {
     method: 'PUT',
@@ -31,6 +37,17 @@ async function apiPut(url, body) {
     throw new Error(message);
   }
   return res.json();
+}
+
+async function apiDelete(url) {
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: { 'X-CSRF-TOKEN': CSRF, Accept: 'application/json' },
+  });
+  if (!res.ok) {
+    throw new Error(`${res.status} ${res.statusText}`);
+  }
+  return res.json().catch(() => ({}));
 }
 
 /** Keep the builder filling everything below the Filament header. */
@@ -66,7 +83,7 @@ function App({ rootRef }) {
     setSaving(true);
     setError(null);
     try {
-      const updated = await apiPut(`${API}/templates/${template.id}`, body);
+      const updated = await apiPut(SAVE_URL || `${API}/templates/${template.id}`, body);
       // The heading is server-rendered; keep it in step after a rename.
       const heading = document.querySelector('.fi-header-heading, .fi-page-header-heading, h1.fi-header-heading');
       if (heading && updated.name) heading.textContent = updated.name;
@@ -84,18 +101,34 @@ function App({ rootRef }) {
     window.open(`${API}/templates/${template.id}/preview`, '_blank', 'noopener');
   }, [template.id]);
 
+  // Drop the host page's override and reopen on whatever it falls back to.
+  // Only wired when the host configured a resetUrl — a template has nothing
+  // to reset to.
+  const handleReset = useCallback(async () => {
+    if (!RESET_URL) return;
+    try {
+      await apiDelete(RESET_URL);
+      window.location.reload();
+    } catch (e) {
+      setError(`Reset failed — ${e.message}`);
+    }
+  }, []);
+
   // Filament's header actions dispatch these.
   useEffect(() => {
     const onSaveEvent    = () => bridge.current.save?.();
     const onPreviewEvent = () => bridge.current.preview?.();
     const onHelpEvent    = () => bridge.current.showShortcuts?.();
+    const onResetEvent   = () => bridge.current.reset?.();
     window.addEventListener('pdf-builder:save', onSaveEvent);
     window.addEventListener('pdf-builder:preview', onPreviewEvent);
     window.addEventListener('pdf-builder:shortcuts', onHelpEvent);
+    window.addEventListener('pdf-builder:reset', onResetEvent);
     return () => {
       window.removeEventListener('pdf-builder:save', onSaveEvent);
       window.removeEventListener('pdf-builder:preview', onPreviewEvent);
       window.removeEventListener('pdf-builder:shortcuts', onHelpEvent);
+      window.removeEventListener('pdf-builder:reset', onResetEvent);
     };
   }, []);
 
@@ -126,6 +159,7 @@ function App({ rootRef }) {
           models={MODELS}
           onSave={handleSave}
           onPreview={handlePreview}
+          onReset={RESET_URL ? handleReset : undefined}
           bridge={bridge}
           saving={saving}
           saveError={error}

@@ -22,15 +22,28 @@ const ARROW_DELTA = {
   ArrowUp:    [0, -1], ArrowDown:  [0, 1],
 };
 
-function BuilderView({ template, models, onSave, onPreview, bridge, saving, saveError }) {
+// Host-page config — both keys are optional and absent when editing a template.
+// allowedKeys  → palette narrowed to a named subset of the model's fields
+// mode         → 'placement': move existing boxes only, never edit the template
+const CFG = (typeof window !== 'undefined' && window.__PDF_BUILDER__) || {};
+const ALLOWED_KEYS = Array.isArray(CFG.allowedKeys) && CFG.allowedKeys.length ? CFG.allowedKeys : null;
+const PLACEMENT_MODE = CFG.mode === 'placement';
+
+function BuilderView({ template, models, onSave, onPreview, onReset, bridge, saving, saveError }) {
   const modelKey = template.model_key || 'invoice';
   const rawModel = models[modelKey] || { label: modelKey, fields: [], relations: {} };
-  const model = useMemo(() => ({
-    name: rawModel.label || modelKey,
-    icon: rawModel.icon || 'database',
-    fields: rawModel.fields || [],
-    relations: rawModel.relations || {},
-  }), [rawModel, modelKey]);
+  const model = useMemo(() => {
+    const keep = (f) => !ALLOWED_KEYS || ALLOWED_KEYS.includes(f.key);
+
+    return {
+      name: rawModel.label || modelKey,
+      icon: rawModel.icon || 'database',
+      fields: (rawModel.fields || []).filter(keep),
+      // A narrowed palette stays flat — relations would reintroduce
+      // everything the allowlist just took out.
+      relations: ALLOWED_KEYS ? {} : (rawModel.relations || {}),
+    };
+  }, [rawModel, modelKey]);
 
   const { doc, update, commit, undo, redo, canUndo, canRedo } = useDocument(() => normalizeDoc(template));
 
@@ -230,8 +243,12 @@ function BuilderView({ template, models, onSave, onPreview, bridge, saving, save
 
   // Expose to the Filament header buttons.
   useEffect(() => {
-    bridge.current = { save, preview, showShortcuts: () => setHelpOpen(true), isDirty: () => dirty };
-  }, [bridge, save, preview, dirty]);
+    bridge.current = {
+      save, preview, reset: onReset,
+      showShortcuts: () => setHelpOpen(true),
+      isDirty: () => dirty,
+    };
+  }, [bridge, save, preview, onReset, dirty]);
 
   // ── Context menus ───────────────────────────────────────────────────────────
   const openElementMenu = useCallback((x, y) => {
@@ -361,11 +378,13 @@ function DragGhost({ drag }) {
 
 // ───────── Sidebar ─────────
 function Sidebar({ editor, model, activeTab, onTab, onStartDrag }) {
+  // Placement mode repositions existing boxes — adding elements or changing
+  // page setup would edit the template, which is not that page's job.
   const tabs = [
     { id: 'fields',   icon: 'database', label: 'Fields'   },
-    { id: 'elements', icon: 'type',     label: 'Elements' },
+    ...(PLACEMENT_MODE ? [] : [{ id: 'elements', icon: 'type', label: 'Elements' }]),
     { id: 'layers',   icon: 'layers',   label: 'Layers'   },
-    { id: 'settings', icon: 'settings', label: 'Settings' },
+    ...(PLACEMENT_MODE ? [] : [{ id: 'settings', icon: 'settings', label: 'Settings' }]),
   ];
 
   return (

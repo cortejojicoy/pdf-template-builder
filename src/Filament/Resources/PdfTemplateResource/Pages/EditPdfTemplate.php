@@ -58,7 +58,7 @@ class EditPdfTemplate extends Page
                     'filename_pattern'=> $this->record->filename_pattern,
                     'fields'          => $this->record->fields ?? [],
                     'settings'        => $this->record->settings ?? [],
-                    'background_url'  => $this->record->background_url,
+                    'background_url'  => $this->record->canvas_background_url,
                 ],
                 'models'       => $plugin->getModels(),
                 'apiBase'      => route('pdf-builder.api.base'),
