@@ -51,6 +51,9 @@ class PdfTemplateController extends Controller
             'fields.*.h'            => 'required_with:fields|numeric|min:0',
             'fields.*.page'         => 'sometimes|integer|min:0',
             'pages'                 => 'sometimes|integer|min:1|max:200',
+            'settings'              => 'sometimes|array',
+            'settings.margins'      => 'sometimes|array',
+            'settings.margins.*'    => 'sometimes|numeric|min:0|max:400',
             'page_size'             => 'sometimes|string|in:Letter,A4,Legal',
             'orientation'           => 'sometimes|string|in:portrait,landscape',
             'filename_pattern'      => 'sometimes|string|max:255',
@@ -63,6 +66,11 @@ class PdfTemplateController extends Controller
 
         if ($request->has('fields')) {
             $data['fields'] = $request->input('fields');
+        }
+
+        // Merge rather than replace so keys this build doesn't know about survive.
+        if ($request->has('settings') && PdfTemplate::supportsSettings()) {
+            $data['settings'] = array_replace($template->settings ?? [], $request->input('settings'));
         }
 
         $template->update($data);
@@ -168,6 +176,8 @@ class PdfTemplateController extends Controller
             'pages'            => $template->pages,
             'filename_pattern' => $template->filename_pattern,
             'fields'           => $template->fields ?? [],
+            'settings'         => PdfTemplate::supportsSettings() ? ($template->settings ?? []) : [],
+            'margins'          => $template->margins,
             'background_url'   => $template->background_url,
             'used_in'          => $template->used_in,
             'updated_at'       => $template->updated_at?->toISOString(),
