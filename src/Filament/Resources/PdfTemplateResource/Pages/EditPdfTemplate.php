@@ -65,8 +65,21 @@ class EditPdfTemplate extends Page
                 'csrfToken'    => csrf_token(),
                 'listUrl'      => static::getResource()::getUrl('index'),
                 'assetBase'    => asset('vendor/pdf-template-builder'),
+                'assetVersion' => static::assetVersion(),
             ],
         ];
+    }
+
+    /**
+     * Cache-buster for the published bundle. Without it a browser keeps running
+     * the previous pdf-builder.js after `vendor:publish --force`, which is how
+     * a fixed build can look broken.
+     */
+    public static function assetVersion(): string
+    {
+        $path = public_path('vendor/pdf-template-builder/pdf-builder.js');
+
+        return is_file($path) ? (string) filemtime($path) : 'dev';
     }
 
     public function getTitle(): string|\Illuminate\Contracts\Support\Htmlable
