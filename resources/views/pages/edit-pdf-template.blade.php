@@ -98,6 +98,19 @@
         }
     </style>
 
+    @php
+        // The page class normally supplies these. Derive them here as well so a
+        // host app running an older copy of the package — or its own builder
+        // page — still renders, and still gets a cache-busted bundle.
+        $base   = $builderConfig['assetBase'] ?? asset('vendor/pdf-template-builder');
+        $bundle = public_path('vendor/pdf-template-builder/pdf-builder.js');
+        $ver    = $builderConfig['assetVersion']
+            ?? (is_file($bundle) ? (string) filemtime($bundle) : null);
+
+        $builderConfig['assetBase']    = $base;
+        $builderConfig['assetVersion'] = $ver;
+    @endphp
+
     {{-- ── Bootstrap config for the React app ────────────────────────────────── --}}
     <script>
         window.__PDF_BUILDER__ = @json($builderConfig);
@@ -111,6 +124,5 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Caveat:wght@500&display=swap" rel="stylesheet" />
 
     {{-- ── Bundled builder app (Vite-built, published to public/vendor/pdf-template-builder/) ── --}}
-    @php $base = $builderConfig['assetBase']; $ver = $builderConfig['assetVersion']; @endphp
-    <script src="{{ $base }}/pdf-builder.js?v={{ $ver }}" defer></script>
+    <script src="{{ $base }}/pdf-builder.js{{ $ver ? '?v=' . $ver : '' }}" defer></script>
 </x-filament-panels::page>
