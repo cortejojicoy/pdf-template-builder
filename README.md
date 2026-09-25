@@ -12,12 +12,16 @@
 composer require kukux/pdf-template-builder
 ```
 
-## 2. Publish and run the migration
+## 2. Publish and run the migrations
 
 ```bash
 php artisan vendor:publish --tag=pdf-template-builder-migrations
 php artisan migrate
 ```
+
+> Upgrading from an earlier version? Re-publish and migrate — `add_settings_to_pdf_templates_table`
+> adds the `settings` column that stores page margins. The builder degrades gracefully
+> until you do: margins simply aren't persisted.
 
 ## 3. Publish assets
 
@@ -167,6 +171,61 @@ PdfTemplateBuilderPlugin::make()->disk('s3')->uploadPath('my-path/pdfs')
 - **Visual builder**: Drag fields from the sidebar onto the PDF canvas, resize them, style their typography, and save the layout.
 - **API routes** at `/filament-pdf-builder/api/*` (web + auth middleware).
 - **`pdf_templates` table** in your database.
+
+## Using the builder
+
+The page chrome — breadcrumbs, heading and the **Shortcuts / Preview / Save template**
+buttons — is rendered by Filament, so it inherits your panel's theme. Those buttons drive
+the React canvas through DOM events (`pdf-builder:save`, `pdf-builder:preview`,
+`pdf-builder:shortcuts`), which keeps the click client-side: the document being edited
+lives in the browser, so there is nothing for a Livewire round-trip to act on.
+
+### Canvas
+
+| Gesture | Result |
+| --- | --- |
+| Scroll / ⇧+scroll | Move through the document / sideways |
+| ⌘ or Ctrl + scroll, or trackpad pinch | Zoom, anchored at the pointer |
+| Space-drag, or middle-drag | Pan |
+| Drag on empty space | Marquee-select |
+| ⇧+click | Add to or remove from the selection |
+| Alt-drag | Clone the selection |
+| ⇧ while resizing | Keep the aspect ratio |
+| Alt while resizing | Resize from the centre |
+| Alt while dragging | Ignore snapping |
+| Right-click | Context menu (element or page) |
+
+Elements snap to each other, to the page edges and centre, and to the margin box.
+Toggle snapping, rulers, the grid and the margin guides from the canvas toolbar.
+
+### Pages
+
+Add, duplicate, reorder and delete pages from the thumbnail rail, the canvas toolbar, the
+strip under each page, or the right-click menu. Deleting a page removes its elements and
+shifts later pages up; if the page isn't empty you're asked to confirm first, and ⌘Z undoes
+it either way.
+
+### Keyboard shortcuts
+
+Press <kbd>?</kbd> in the builder for the full list. The everyday ones:
+
+| Keys | Action |
+| --- | --- |
+| ⌘S | Save template |
+| ⌘Z / ⌘⇧Z | Undo / redo |
+| ⌘C, ⌘X, ⌘V, ⌘D | Copy, cut, paste, duplicate |
+| ⌫ | Delete selection |
+| ⌘A / Esc | Select all on page / deselect |
+| ← ↑ → ↓ | Nudge 1 pt (⇧ for 10 pt) |
+| ⌘] / ⌘[ | Bring forward / send backward (⇧ for front / back) |
+| ⌘0 / ⌘1 / ⌘2 | Fit page / 100% / fit width |
+| ⌘+ / ⌘− | Zoom in / out |
+| R / G / S | Rulers / grid / snapping |
+| PgUp / PgDn | Previous / next page |
+| ⌘⇧N / ⌘⇧⌫ | Add / delete page |
+| ⌘⇧P | Preview PDF |
+
+On Windows and Linux, Ctrl replaces ⌘.
 
 ## Generating PDFs
 
